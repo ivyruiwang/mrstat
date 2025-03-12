@@ -3,6 +3,7 @@ using BlochSimulators
 using StaticArrays, LinearAlgebra, Statistics, StructArrays
 using LinearMaps
 using ImagePhantoms
+ENV["MPLBACKEND"] = "agg"
 using PythonPlot
 using ComputationalResources
 
@@ -18,7 +19,6 @@ includet("utils/RelaxationColors.jl")
 includet("utils/pythonplot.jl")
 
 # Simulation size
-
     N = 224; # phantom of size N^2
     K = 5; # number of fully sampled Cartesian "transient-state k-spaces"
     nTR = K*N; # total number of TRs

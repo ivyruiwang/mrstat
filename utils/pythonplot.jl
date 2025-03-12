@@ -28,4 +28,7 @@ function plot_T₁T₂ρ(x::AbstractArray{<:AbstractTissueParameters}, Nx, Ny, f
 
     suptitle(figtitle)
 
+    save_path = "/home/iwang3/"
+    savefig(joinpath(save_path, figtitle * ".png"))
+
 end
