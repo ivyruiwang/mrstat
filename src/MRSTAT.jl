@@ -33,7 +33,8 @@ function mrstat_recon(
     LB=T₁T₂ρˣρʸ(log(0.1), log(0.001), -Inf, -Inf),
     UB=T₁T₂ρˣρʸ(log(7.0), log(3.000), Inf, Inf),
     trf_options=TrustRegionReflective.SolverOptions(),
-    ) where {T<:Complex}
+    intermediate_plots = false
+) where {T<:Complex}
 
     # Repeat the initial guess and bounds for each voxel
     # Note: x0, LB and UB are in log space for T₁ and T₂
@@ -49,9 +50,8 @@ function mrstat_recon(
     resource = CUDALibs()
     objfun = (x, mode) -> objective(x, resource, mode, raw_data, sequence, coordinates, coil_sensitivities, trajectory, transmit_field)
 
-    plotfun(x, figtitle) = plot_T₁T₂ρ(optim_to_physical_pars(x), isqrt(num_voxels), isqrt(num_voxels), figtitle)
+    plotfun(x, figtitle) = intermediate_plots ? plot_T₁T₂ρ(optim_to_physical_pars(x, transmit_field), isqrt(num_voxels), isqrt(num_voxels), figtitle) : nothing
     plotfun(x0, "Initial Guess")
-    # plotfun(x, figtitle) = println("Not plotting anything")
 
     output = TrustRegionReflective.solver(objfun, vec(x0), vec(LB), vec(UB), trf_options, plotfun)
 
