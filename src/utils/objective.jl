@@ -1,4 +1,4 @@
-function objective(optimpars::Vector{<:Real}, resource, mode, raw_data, sequence, coordinates, coil_sensitivities, trajectory)
+function objective(optimpars::Vector{<:Real}, resource, mode, raw_data, sequence, coordinates, coil_sensitivities, trajectory, transmit_field)
 
     # We compute the residual rᵢ = ||d Σᵢ (dᵢ - M(T₁,T₂,B₁,B₀)*Cᵢ*ρ)
     # f = (1/2) * |r|^2
@@ -9,7 +9,7 @@ function objective(optimpars::Vector{<:Real}, resource, mode, raw_data, sequence
     # mode 2 -> compute f, r, g and assemble approximate Hessian
 
     # Convert optimpars (Vector{<:Real}) to Vector{<:AbstractTissueParameters} to be used in simulations
-    parameters = optim_to_physical_pars(optimpars)
+    parameters = optim_to_physical_pars(optimpars, transmit_field)
 
     # Convert to single precision and send to gpu device
     parameters = gpu(f32(parameters))
@@ -93,13 +93,14 @@ function objective(optimpars::Vector{<:Real}, resource, mode, raw_data, sequence
     end
 end
 
-function optim_to_physical_pars(optimpars)
+function optim_to_physical_pars(optimpars, transmit_field)
 
     optimpars = reshape(optimpars,:,4)
     T₁ = exp.(optimpars[:,1])
     T₂ = exp.(optimpars[:,2])
+    B₁ = vec(transmit_field)
     ρˣ = optimpars[:,3]
     ρʸ = optimpars[:,4]
 
-    return map(T₁T₂ρˣρʸ, T₁, T₂, ρˣ, ρʸ) |> StructArray
+    return map(T₁T₂B₁ρˣρʸ, T₁, T₂, B₁, ρˣ, ρʸ) |> StructArray
 end
