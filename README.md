@@ -7,7 +7,7 @@ This repository contains an implementation of the partially-matrix free, inexact
 This package is not registered in Julia's General registry. It can be installed with
 
 ```julia
->pkg add https://github.com/oscarvanderheide/mrstat.git
+>pkg add https://github.com/oscarvanderheide/MRSTAT.jl.git
 ```
 
 ## Warning:
