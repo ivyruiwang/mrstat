@@ -29,7 +29,7 @@ includet("utils/pythonplot.jl")
     sliceprofiles = ones(nTR,1) .|> complex;
     TR = 0.010;
     TE = 0.006;
-    max_state = 64;
+    max_state = 35;
     TI = 0.025;
 
     # assemble sequence struct
@@ -124,8 +124,8 @@ includet("utils/pythonplot.jl")
 
     # Run Trust Refion Reflective solver
     trf_min_ratio = 0.05;
-    trf_max_iter = 4; 
-    trf_max_iter_steihaug = 4;
+    trf_max_iter = 20;
+    trf_max_iter_steihaug = 20;
     trf_tol_steihaug = 0.1;
     trf_init_scale_radius = 0.1;
     trf_save_every_iter = false;
@@ -146,8 +146,3 @@ includet("utils/pythonplot.jl")
 
     output = TrustRegionReflective.solver(objfun, vec(x0), vec(LB), vec(UB), TRF_options, plotfun)
     
-println("\n" * "="^40)
-println("--- Solver Timing Result ---")
-# 访问 output 结构体中的 .t 字段并打印
-println("Solver internal time from TickTock (output.t): ", output.t, " seconds")
-println("="^40 * "\n")

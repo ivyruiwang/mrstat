@@ -99,7 +99,9 @@ includet("utils/pythonplot.jl")
 
 # Simulate data
     resource = CUDALibs()
-    raw_data = simulate_signal(resource, sequence, phantom, trajectory, coil_sensitivities)
+    t_prep = @elapsed begin
+        raw_data = simulate_signal(resource, sequence, phantom, trajectory, coil_sensitivities)
+    end
 
 # Add noise?
 
@@ -124,8 +126,8 @@ includet("utils/pythonplot.jl")
 
     # Run Trust Refion Reflective solver
     trf_min_ratio = 0.05;
-    trf_max_iter = 4; 
-    trf_max_iter_steihaug = 4;
+    trf_max_iter = 20; 
+    trf_max_iter_steihaug = 20;
     trf_tol_steihaug = 0.1;
     trf_init_scale_radius = 0.1;
     trf_save_every_iter = false;
@@ -143,11 +145,16 @@ includet("utils/pythonplot.jl")
     plotfun(x0, "Initial Guess")
 
 # Run non-linear solver
-
-    output = TrustRegionReflective.solver(objfun, vec(x0), vec(LB), vec(UB), TRF_options, plotfun)
+    t_solve = @elapsed begin
+        output = TrustRegionReflective.solver(objfun, vec(x0), vec(LB), vec(UB), TRF_options, plotfun)
+    end
     
-println("\n" * "="^40)
-println("--- Solver Timing Result ---")
-# 访问 output 结构体中的 .t 字段并打印
-println("Solver internal time from TickTock (output.t): ", output.t, " seconds")
-println("="^40 * "\n")
+
+println("准备阶段 simulate_signal  wall time: $(t_prep) s")
+println("重建阶段 solver           wall time: $(t_solve) s\n")
+
+t_cum = vec(output.t)                     # 转成向量
+t_iter = diff(vcat(0.0, t_cum))           # 每次迭代耗时（秒）
+using DelimitedFiles
+writedlm("iter_time_seconds.csv", t_iter, ',') # 写 CSV（便于画图）
+
