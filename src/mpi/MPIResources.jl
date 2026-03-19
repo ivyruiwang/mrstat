@@ -1,11 +1,9 @@
-# MPI + CUDA definitions
+# MPI + CUDA
 
 using MPI
 
 """
-    MPICUDALibs <: AbstractResource
-
-MPI + CUDA resource type. Each MPI rank binds to one GPU.
+Each MPI rank binds to one GPU.
 """
 struct MPICUDALibs <: AbstractResource{Nothing}
     comm::MPI.Comm
@@ -17,7 +15,6 @@ end
 function MPICUDALibs(comm::MPI.Comm = MPI.COMM_WORLD)
     rank   = MPI.Comm_rank(comm)
     nranks = MPI.Comm_size(comm)
-    # mpirun sets OMPI_COMM_WORLD_LOCAL_RANK; srun sets SLURM_LOCALID
     local_rank = parse(Int, get(ENV, "OMPI_COMM_WORLD_LOCAL_RANK",
                                 get(ENV, "SLURM_LOCALID", string(rank))))
     local_gpu_id = local_rank % length(CUDA.devices())
