@@ -7,8 +7,7 @@
 #SBATCH --error=mrstat_mpi_%j.err
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=4
-#SBATCH --gres=gpu:A4000:4
-#SBATCH -C A4000
+#SBATCH --gres=gpu:4
 #SBATCH --time=01:00:00
 
 module load julia/1.10.3
