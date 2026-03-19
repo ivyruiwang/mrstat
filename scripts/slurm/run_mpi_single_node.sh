@@ -1,7 +1,6 @@
 #!/bin/bash
 # ============================================================================
-#  单节点多 GPU: node005 或 node008 (A4000 × 4)
-#  用法: sbatch scripts/slurm/run_mpi_single_node.sh
+#  sbatch scripts/slurm/run_mpi_single_node.sh
 # ============================================================================
 #SBATCH --job-name=mrstat-mpi
 #SBATCH --output=mrstat_mpi_%j.out
@@ -23,7 +22,7 @@ export MPLBACKEND="agg"
 cd /home/iwang3/mrstat_main
 
 echo "============================================="
-echo "  MPI MRSTAT — single node, 4 × A4000"
+echo "  MPI MRSTAT — single node, 4 GPUs"
 echo "  Node : $(hostname)"
 echo "  Tasks: ${SLURM_NTASKS}"
 echo "  Job  : ${SLURM_JOB_ID}"
