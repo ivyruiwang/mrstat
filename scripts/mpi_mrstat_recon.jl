@@ -1,10 +1,8 @@
 #!/usr/bin/env julia
 # ============================================================================
-#  MPI-based MRSTAT Reconstruction
-#
-#  Launch via SLURM:
-#    sbatch scripts/slurm/run_mpi_single_node.sh
-#    sbatch scripts/slurm/run_mpi_multi_node.sh
+# Run commands below on SLURM:
+# sbatch scripts/slurm/run_mpi_single_node.sh
+# sbatch scripts/slurm/run_mpi_multi_node.sh
 # ============================================================================
 
 using MPI
@@ -23,37 +21,32 @@ using MRSTAT.DerivativeOperations: simulate_derivatives, Jv, Jᴴv
 using ComputationalResources: AbstractResource, CUDALibs
 using LinearAlgebra, LinearMaps, StaticArrays, StructArrays
 
-# Load MPI utilities (plain includes, shares MRSTAT namespace)
+# Load MPI defnitions
 include(joinpath(@__DIR__, "..", "src", "mpi", "MPIResources.jl"))
 include(joinpath(@__DIR__, "..", "src", "mpi", "mpi_objective.jl"))
 
-# ========================= MPI Setup ========================================
-
+# MPI Setup
 res    = MPICUDALibs()
 comm   = res.comm
 rank   = res.rank
 nranks = res.nranks
-
 rank == 0 && println("=== MPI MRSTAT Reconstruction ===")
 rank == 0 && println("    Ranks: $nranks")
 println("    Rank $rank → GPU $(res.local_gpu_id) ($(CUDA.name(CUDA.device())))")
 MPI.Barrier(comm)
 
-# ========================= Data Generation ==================================
-# All ranks generate identical data (deterministic), then partition per-voxel arrays.
-
-rank == 0 && println("\nGenerating simulation data …")
-using Random; Random.seed!(42)   # fixed seed so all ranks generate identical phantom
-raw_data, sequence, coords_full, coils_full, trajectory =
-    MRSTAT.generate_simulation_data()
+# Data Generation
+# All ranks generate identical data then partition voxel-wise
+rank == 0 && println("\nGenerating simulation data...")
+using Random; Random.seed!(42)   # !!! MUST fixed seed so all ranks generate exactly same phantom
+raw_data, sequence, coords_full, coils_full, trajectory = MRSTAT.generate_simulation_data()
 
 total_nvox = length(coords_full)
 N = isqrt(total_nvox)
 
 rank == 0 && println("    Image: $N × $N ($total_nvox voxels)")
 
-# ========================= Voxel Partitioning ===============================
-
+# Voxel Partitioning
 vr = voxel_partition(total_nvox, rank, nranks)
 local_nvox = length(vr)
 println("    Rank $rank → voxels $(first(vr)):$(last(vr)) ($local_nvox voxels)")
@@ -65,8 +58,7 @@ local_tx     = ones(Float32, local_nvox)   # uniform transmit field
 MPI.Barrier(comm)
 rank == 0 && println("Data partitioned.\n")
 
-# ========================= Optimization =====================================
-
+# Optimization
 x0_per = Float32[log(1.0), log(0.100), 1.0, 0.0]
 LB_per = Float32[log(0.1), log(0.001), -Inf, -Inf]
 UB_per = Float32[log(7.0), log(3.000),  Inf,  Inf]
@@ -96,9 +88,9 @@ trf_opts = TrustRegionReflective.SolverOptions(;
     tol_steihaug      = 0.1,
 )
 
-# ========================= Run ==============================================
+# Run Reconstruction
 
-rank == 0 && println("Starting TRF solver …\n")
+rank == 0 && println("Running TRF solver …\n")
 MPI.Barrier(comm)
 
 output = TrustRegionReflective.solver(objfun, x0, LB, UB, trf_opts, plotfun)
