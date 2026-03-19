@@ -1,4 +1,4 @@
-# MPI + CUDA resource definitions
+# MPI + CUDA definitions
 
 using MPI
 
