@@ -1,5 +1,4 @@
-# MPI + CUDA resource definitions and utilities
-# Included (not a module) — shares MRSTAT's namespace
+# MPI + CUDA resource definitions
 
 using MPI
 
