@@ -8,6 +8,7 @@
 #SBATCH --nodes=2
 #SBATCH --ntasks-per-node=2
 #SBATCH --gres=gpu:2
+#SBATCH --exclude=node[016-020]
 #SBATCH --time=01:00:00
 
 module load julia/1.10.3
@@ -31,6 +32,6 @@ echo "  Tasks: ${SLURM_NTASKS}"
 echo "  Job  : ${SLURM_JOB_ID}"
 echo "============================================="
 
-mpirun julia --project=. scripts/mpi_mrstat_recon.jl
+mpirun --mca pml ob1 --mca btl tcp,self julia --project=. scripts/mpi_mrstat_recon.jl
 
 echo "Job finished at $(date)"

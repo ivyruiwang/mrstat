@@ -8,6 +8,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=4
 #SBATCH --gres=gpu:4
+#SBATCH --exclude=node[016-020]
 #SBATCH --time=01:00:00
 
 module load julia/1.10.3
