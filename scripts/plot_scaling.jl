@@ -1,9 +1,5 @@
 #!/usr/bin/env julia
-# ============================================================================
 # Plot scaling law: speedup, wall-time, and per-iteration time breakdown
-#
-# Usage: julia --project=. scripts/plot_scaling.jl results_mpi_1n1g.jld2 results_mpi_1n2g.jld2 ...
-# ============================================================================
 
 using Pkg
 Pkg.activate(joinpath(@__DIR__, ".."))
@@ -17,10 +13,9 @@ if isempty(ARGS)
     exit(1)
 end
 
-# Infer results directory from first .jld2 path
 results_dir = dirname(abspath(ARGS[1]))
 
-# ── Load wall-time from .jld2 files ──────────────────────────
+# Load wall-time from .jld2 files
 
 struct ScalingPoint
     ngpus::Int
@@ -45,7 +40,7 @@ sort!(points, by=p -> p.ngpus)
 outdir = "/home/iwang3/mrstat_main/analysis_results"
 mkpath(outdir)
 
-# ── Print & save scaling summary ─────────────────────────────
+# print & save scaling summary
 
 t_base = points[1].wall_time
 
@@ -63,8 +58,6 @@ open(joinpath(outdir, "scaling_summary.csv"), "w") do io
     end
 end
 println("  Saved: scaling_summary.csv")
-
-# ── Plot 1: Speedup vs GPU count ─────────────────────────────
 
 ngpus_list = [p.ngpus for p in points]
 speedups = [t_base / p.wall_time for p in points]
@@ -86,8 +79,6 @@ tight_layout()
 savefig(joinpath(outdir, "scaling_speedup.png"), dpi=600)
 println("  Saved: scaling_speedup.png")
 
-# ── Plot 2: Wall-time bar chart ──────────────────────────────
-
 walltimes = [p.wall_time for p in points]
 bar_labels = ["$(p.nnodes) Node\n$(p.ngpus) GPU$(p.ngpus > 1 ? "s" : "")" for p in points] 
 
@@ -100,14 +91,11 @@ tight_layout()
 savefig(joinpath(outdir, "scaling_walltime.png"), dpi=600)
 println("  Saved: scaling_walltime.png")
 
-# ── Plot 3: Per-iteration breakdown (one figure per config) ──
-
 step_names = ["Objective", "Steihaug-CG", "Step Selection"]
 colors = ["tab:blue", "tab:red", "tab:purple"]
 # CSV columns: iter(1), t_iter(2), t_obj(3), t_precond(4), t_steihaug(5), t_choose(6), t_evalnew(7)
 # Merge t_obj(3) + t_evalnew(7) into "Objective"; drop t_precond(4) (negligible)
 
-# First pass: find global y-axis max across all configs
 global_ymax = 0.0
 for p in points
     csvname = joinpath(results_dir, "solver_iter_breakdown_$(p.nnodes)n$(p.ngpus)g.csv")
@@ -117,7 +105,6 @@ for p in points
 end
 global_ymax = ceil(global_ymax * 1.15 / 1000) * 1000   # 15% headroom, round up to nearest 1000
 
-# Second pass: plot each config with unified y-axis
 for p in points
     csvname = joinpath(results_dir, "solver_iter_breakdown_$(p.nnodes)n$(p.ngpus)g.csv")
     if !isfile(csvname)
@@ -128,7 +115,6 @@ for p in points
     iters = Int.(data[:, 1])
     bottom = zeros(length(iters))
 
-    # Combine objective + trial point eval; drop preconditioner (negligible)
     step_data = [
         data[:, 3] .+ data[:, 7],   # Objective = t_obj + t_evalnew
         data[:, 5],                   # Steihaug-CG
@@ -150,4 +136,4 @@ for p in points
     println("  Saved: $fname")
 end
 
-println("\n=== Scaling analysis complete ===")
+println("\n Scaling analysis complete ")
