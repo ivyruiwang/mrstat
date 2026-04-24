@@ -1,5 +1,3 @@
-# Distributed versions of TrustRegionReflective/utils.jl
-# All vector operations use MPI distributed primitives from MPIResources.jl
 
 function mpi_computeDistanceToBoundaries(x, g, LB, UB, comm)
     v = ones(eltype(g), length(g))
@@ -7,7 +5,7 @@ function mpi_computeDistanceToBoundaries(x, g, LB, UB, comm)
     v[ (g .> 0) .& (LB .> -Inf) ] =  x[ (g .> 0) .& (LB .> -Inf) ] - LB[ (g .> 0) .& (LB .> -Inf) ]
 
     if mpi_any(any(v .< 0), comm)
-        println("    Somehow x is not within the bounds")
+        println("Somehow x is not within the bounds")
         return
     end
 
@@ -41,7 +39,7 @@ function mpi_distanceToTrustRegion2(x, s, trust_radius, comm)
     a = mpi_dot(s, s, comm)
 
     if a == 0
-        println("    distanceToTrustRegion2: WTF s is zero")
+        println("distanceToTrustRegion2: WTF s is zero")
         return
     end
 
@@ -49,7 +47,7 @@ function mpi_distanceToTrustRegion2(x, s, trust_radius, comm)
     c = mpi_dot(x, x, comm) - trust_radius^2
 
     if c > 0
-        println("     distanceToTrustRegion2: WTF")
+        println("distanceToTrustRegion2: WTF")
         return
     end
 
@@ -71,16 +69,16 @@ end
 
 function mpi_adjustTrustRadius(ratio, step, Δ, min_ratio, comm)
     norm_step = mpi_norm(step, comm)
-    println("        Norm of step: $(norm_step), Trust Radius: $(Δ)")
+    println("Norm of step: $(norm_step), Trust Radius: $(Δ)")
 
     if ratio < min_ratio
-        println("    Trust Radius too large")
+        println("Trust Radius too large")
         Δ = (1/4) * Δ
     elseif (ratio > 1/2) && (norm_step > ( 0.95 * Δ) )
-        println("    Trust Radius too small")
+        println("Trust Radius too small")
         Δ = 2 * Δ
     else
-        println("    Trust Radius just fine")
+        println("Trust Radius just fine")
     end
 
     return Δ
@@ -100,8 +98,7 @@ end
 function mpi_buildQuadratic1D(H, g, s, s0, comm)
     Hs = H(s)
     a = 0.5 * mpi_dot(s, Hs, comm)
-
-    # Check if s0 is zero to avoid redundant Hv calls
+    
     if iszero(s0)
         b = mpi_dot(g, s, comm)
         c = zero(a)
@@ -114,7 +111,6 @@ function mpi_buildQuadratic1D(H, g, s, s0, comm)
     return a, b, c
 end
 
-# minimizeQuadratic1D is pure scalar — no change needed, use original directly
 function minimizeQuadratic1D(a, b, lb, ub, c)
     t = [lb, ub]
     if a != 0
@@ -142,7 +138,6 @@ function mpi_chooseStep(x, H_hat, g_hat, gn, gn_hat, D, trust_radius, theta, LB,
         return step, step_hat, step_value
     end
 
-    # POTENTIAL STEP 1: Reflected Newton
     p_steplength, boundary_hit = mpi_distanceToFeasibleRegion(x, gn, LB, UB, comm)
 
     rf_hat = gn_hat
@@ -167,7 +162,7 @@ function mpi_chooseStep(x, H_hat, g_hat, gn, gn_hat, D, trust_radius, theta, LB,
             rf_steplength_u = to_trust
         end
     else
-        println("        rf_steplength <= 0? What's going on?")
+        println("rf_steplength <= 0? What's going on?")
         rf_steplength_l = 0
         rf_steplength_u = -1
     end
@@ -182,12 +177,10 @@ function mpi_chooseStep(x, H_hat, g_hat, gn, gn_hat, D, trust_radius, theta, LB,
         rf_value = Inf
     end
 
-    # POTENTIAL STEP 2: Truncated Newton
     gn       = theta * gn
     gn_hat   = theta * gn_hat
     gn_value  = mpi_evaluateQuadratic(H_hat, g_hat, gn_hat, comm)
 
-    # POTENTIAL STEP 3: Steepest Descent
     sd_hat = -g_hat
     sd = D .* sd_hat
 
@@ -205,7 +198,6 @@ function mpi_chooseStep(x, H_hat, g_hat, gn, gn_hat, D, trust_radius, theta, LB,
     sd_hat = sd_steplength * sd_hat
     sd     = sd_steplength * sd
 
-    # Choose the best step
     values = [gn_value rf_value sd_value]
     minVal = minimum(values)
     index = findfirst(y -> y == minVal, values)
