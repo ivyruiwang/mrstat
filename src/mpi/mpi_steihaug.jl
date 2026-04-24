@@ -1,12 +1,8 @@
 
 function mpi_steihaug(H, g, Δ, P, maxit, tol, z0, total_length, comm)
 
-    # Algorithm 7.2 of Nocedal & Wright, distributed version
-
     println("    Steihaug CG:")
     ϵ = eps()
-    # Use total_length (global element count) for the tolerance heuristic,
-    # not length(g) which is local in distributed mode
     η = min( tol, mpi_norm(g, comm) / total_length )
 
     tol = η * mpi_norm(g, comm)
@@ -21,7 +17,7 @@ function mpi_steihaug(H, g, Δ, P, maxit, tol, z0, total_length, comm)
     sizehint!(steps, maxit*length(d))
 
     if mpi_norm(r, comm) < tol
-        println("        Nothing to gain, residual is already small enough from the start")
+        println("Nothing to gain, residual is already small enough from the start")
         append!(steps, z)
     end
 
@@ -35,7 +31,7 @@ function mpi_steihaug(H, g, Δ, P, maxit, tol, z0, total_length, comm)
         dHd = mpi_dot(d, Hd, comm)
 
         if dHd < ϵ
-            println("        Direction of negative curvature encountered: should not occur because of Gauss-Newton method?")
+            println("Direction of negative curvature encountered: should not occur because of Gauss-Newton method?")
             τ = mpi_distanceToTrustRegion(z, d, Δ, comm)
             append!(steps, z + τ * d)
             break
@@ -45,7 +41,7 @@ function mpi_steihaug(H, g, Δ, P, maxit, tol, z0, total_length, comm)
         z_new = z + α * d
 
         if mpi_norm(z_new, comm) > Δ
-            println("        Fell out of trust radius after iteration $(iter)" )
+            println("Fell out of trust radius after iteration $(iter)" )
             τ = mpi_distanceToTrustRegion(z, d, Δ, comm)
             append!(steps, z + τ * d)
             break
@@ -55,7 +51,7 @@ function mpi_steihaug(H, g, Δ, P, maxit, tol, z0, total_length, comm)
         norm_r_new = mpi_norm(r_new, comm)
 
         if norm_r_new < tol
-            println("        Steihaug-CG converged with CG-residual = $(norm_r_new) after iteration $(iter)")
+            println("Steihaug-CG converged with CG-residual = $(norm_r_new) after iteration $(iter)")
             append!(steps, z_new)
             break
         end
@@ -70,7 +66,7 @@ function mpi_steihaug(H, g, Δ, P, maxit, tol, z0, total_length, comm)
         Y = Y_new
 
         if iter == maxit
-            println("        Steihaug-CG failed to converge, CG-residual = $(norm_r_new)")
+            println("Steihaug-CG failed to converge, CG-residual = $(norm_r_new)")
             append!(steps, z_new)
             break
         else
