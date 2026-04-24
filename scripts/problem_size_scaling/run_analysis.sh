@@ -1,9 +1,5 @@
 #!/bin/bash
-# ============================================================================
-# Run problem size scaling analysis on a GPU compute node
-#
-# Usage: bash scripts/problem_size_scaling/run_analysis.sh
-# ============================================================================
+
 
 cd /home/iwang3/mrstat_main
 
