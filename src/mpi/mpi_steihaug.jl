@@ -1,5 +1,3 @@
-# Distributed version of TrustRegionReflective/steihaug.jl
-# All norm/dot operations use MPI distributed primitives
 
 function mpi_steihaug(H, g, Δ, P, maxit, tol, z0, total_length, comm)
 
