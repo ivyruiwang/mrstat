@@ -1,11 +1,4 @@
 #!/usr/bin/env julia
-# ============================================================================
-# Compare reconstruction results vs ground truth
-# Produces: parameter maps, absolute relative error maps, RMSRE curves,
-#           efficiency (TnNR) curves
-#
-# Usage: julia --project=. scripts/compare_results.jl results_single_gpu.jld2 results_mpi_1n4g.jld2 ...
-# ============================================================================
 
 using Pkg
 Pkg.activate(joinpath(@__DIR__, ".."))
@@ -16,11 +9,11 @@ using MRSTAT: optim_to_physical_pars
 using QMRIColors
 using ImagePhantoms
 
-# ── Load results ──────────────────────────────────────────────
+
 
 struct ReconResult
     output
-    ground_truth    # StructArray{T₁T₂ρˣρʸ}, shape (N, N)
+    ground_truth  
     N::Int
     transmit_field
     meta::Dict
@@ -44,7 +37,7 @@ end
 
 results = [load_result(f) for f in ARGS]
 N = results[1].N
-gt = results[1].ground_truth   # (N, N) StructArray from make_phantom
+gt = results[1].ground_truth   
 
 outdir = "/home/iwang3/mrstat_main/analysis_results"
 mkpath(outdir)
@@ -54,7 +47,6 @@ println("    Image: $N x $N")
 println("    Configs: ", join([r.label for r in results], ", "))
 println("    Output:  $outdir/")
 
-# ── ROI from Shepp-Logan geometry (deterministic, no RNG needed) ──
 
 sl = shepp_logan(N, SheppLoganBrainWeb()) |> rotr90
 unique_vals = unique(sl)
@@ -62,7 +54,6 @@ tissue_rois = [(val, findall(sl .== val)) for val in unique_vals if val != 0]
 roi_mask = vcat([roi for (_, roi) in tissue_rois]...)
 println("    ROIs: $(length(tissue_rois)) tissue types, $(length(roi_mask)) voxels")
 
-# ── Helpers ───────────────────────────────────────────────────
 
 function extract_params(x_all, transmit_field, N, iter)
     x = x_all[:, iter]
@@ -70,25 +61,21 @@ function extract_params(x_all, transmit_field, N, iter)
     return reshape(phys, N, N)
 end
 
-# RMSRE: root mean squared relative error (tissue ROI voxels only)
 function rmsre(recon, truth, mask)
     rel_err = (recon[mask] .- truth[mask]) ./ truth[mask]
     return sqrt(mean(rel_err .^ 2))
 end
 
-# Absolute relative error map (non-ROI voxels stay 0)
 function abs_rel_error_map(recon, truth, mask)
     err = zeros(size(truth))
     err[mask] = abs.(recon[mask] .- truth[mask]) ./ truth[mask]
     return err
 end
 
-# Mean absolute relative error (scalar, matches original paper Figure 7 annotation)
 function mare(recon, truth, mask)
     return mean(abs.(recon[mask] .- truth[mask]) ./ truth[mask])
 end
 
-# TnNR per ROI, averaged across all tissue types
 function mean_tnr(recon_map, rois)
     tnr_vals = Float64[]
     for (_, roi) in rois
@@ -98,8 +85,6 @@ function mean_tnr(recon_map, rois)
     end
     return isempty(tnr_vals) ? 0.0 : mean(tnr_vals)
 end
-
-# ── RMSRE & TnNR vs iteration ────────────────────────────────
 
 function compute_curves(res, gt, roi_mask, tissue_rois)
     n_iters = size(res.output.f, 2)
@@ -120,20 +105,20 @@ end
 all_curves = [compute_curves(r, gt, roi_mask, tissue_rois) for r in results]
 
 
-println("\n RMSRE Summary ")
+println("\n RMSRE ")
 for (r, c) in zip(results, all_curves)
     best_T1 = argmin(c.rmsre_T1)
     best_T2 = argmin(c.rmsre_T2)
-    println("\n  $(r.label):")
-    println("    T1 RMSRE: min=$(round(c.rmsre_T1[best_T1], digits=5)) @iter $(best_T1-1), final=$(round(c.rmsre_T1[end], digits=5))")
-    println("    T2 RMSRE: min=$(round(c.rmsre_T2[best_T2], digits=5)) @iter $(best_T2-1), final=$(round(c.rmsre_T2[end], digits=5))")
+    println("\n$(r.label):")
+    println("T1 RMSRE: min=$(round(c.rmsre_T1[best_T1], digits=5)) @iter $(best_T1-1), final=$(round(c.rmsre_T1[end], digits=5))")
+    println("T2 RMSRE: min=$(round(c.rmsre_T2[best_T2], digits=5)) @iter $(best_T2-1), final=$(round(c.rmsre_T2[end], digits=5))")
 end
 
-println("\n Efficiency (TnNR) Summary ")
+println("\nEfficiency (TnNR) ")
 for (r, c) in zip(results, all_curves)
     best_T1 = argmin(c.rmsre_T1)
     best_T2 = argmin(c.rmsre_T2)
-    println("\n $(r.label):")
+    println("\n$(r.label):")
     println(" T1 TnNR: @best=$(round(c.tnr_T1[best_T1], digits=1)), @final=$(round(c.tnr_T1[end], digits=1))")
     println(" T2 TnNR: @best=$(round(c.tnr_T2[best_T2], digits=1)), @final=$(round(c.tnr_T2[end], digits=1))")
 end
@@ -152,7 +137,7 @@ println("\nOptimal Iterations")
 println("T1: iteration $opt_T1 (RMSRE=$(round(all_curves[1].rmsre_T1[opt_T1+1], digits=5)))")
 println("T2: iteration $opt_T2 (RMSRE=$(round(all_curves[1].rmsre_T2[opt_T2+1], digits=5)))")
 if nf > 0
-    println("    Noise floor: $nf")
+    println("Noise floor: $nf")
 end
 
 figure(figsize=(5, 4))
@@ -172,7 +157,7 @@ title("Cost vs Iteration")
 xticks(0:max_iter); legend(); grid(true, alpha=0.3)
 tight_layout()
 savefig(joinpath(outdir, "cost_vs_iteration.png"), dpi=600)
-println("\n Saved: cost_vs_iteration.png")
+println("\nSaved: cost_vs_iteration.png")
 
 rmsre_all_vals = vcat([vcat(c.rmsre_T1, c.rmsre_T2) for c in all_curves]...)
 rmsre_ymin = minimum(rmsre_all_vals) * 0.9
