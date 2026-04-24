@@ -1,8 +1,4 @@
-# MPI version of the objective function — distributed solver interface
-#
-# Input:  local_optimpars (local_nvox × 4, field-major)
-# Output: g_local (local_nvox × 4, field-major), H operates local→local
-#         No allgatherv in gradient or Hessian-vector product.
+# MPI version of the objective function
 
 function mpi_objective(
     local_optimpars::Vector{<:Real},
