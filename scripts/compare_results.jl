@@ -119,9 +119,8 @@ end
 
 all_curves = [compute_curves(r, gt, roi_mask, tissue_rois) for r in results]
 
-# ── Print summary table ──────────────────────────────────────
 
-println("\n  --- RMSRE Summary ---")
+println("\n RMSRE Summary ")
 for (r, c) in zip(results, all_curves)
     best_T1 = argmin(c.rmsre_T1)
     best_T2 = argmin(c.rmsre_T2)
@@ -130,37 +129,31 @@ for (r, c) in zip(results, all_curves)
     println("    T2 RMSRE: min=$(round(c.rmsre_T2[best_T2], digits=5)) @iter $(best_T2-1), final=$(round(c.rmsre_T2[end], digits=5))")
 end
 
-println("\n  --- Efficiency (TnNR) Summary ---")
+println("\n Efficiency (TnNR) Summary ")
 for (r, c) in zip(results, all_curves)
     best_T1 = argmin(c.rmsre_T1)
     best_T2 = argmin(c.rmsre_T2)
-    println("\n  $(r.label):")
-    println("    T1 TnNR: @best=$(round(c.tnr_T1[best_T1], digits=1)), @final=$(round(c.tnr_T1[end], digits=1))")
-    println("    T2 TnNR: @best=$(round(c.tnr_T2[best_T2], digits=1)), @final=$(round(c.tnr_T2[end], digits=1))")
+    println("\n $(r.label):")
+    println(" T1 TnNR: @best=$(round(c.tnr_T1[best_T1], digits=1)), @final=$(round(c.tnr_T1[end], digits=1))")
+    println(" T2 TnNR: @best=$(round(c.tnr_T2[best_T2], digits=1)), @final=$(round(c.tnr_T2[end], digits=1))")
 end
 
-# ── Shared plot settings ──────────────────────────────────────
-
 markers = ["o-", "x--", "s-.", "d:", "^-", "v--"]
-T_scan = 11.2   # seconds (nTR * TR = 1120 * 0.01)
+T_scan = 11.2   
 sqrt_Tscan = sqrt(T_scan)
 max_iter = maximum(size(r.output.f, 2) - 1 for r in results)
 
-# Optimal iteration: min RMSRE from first result (baseline)
-opt_T1 = argmin(all_curves[1].rmsre_T1) - 1   # 0-indexed iteration
+opt_T1 = argmin(all_curves[1].rmsre_T1) - 1   
 opt_T2 = argmin(all_curves[1].rmsre_T2) - 1
 
-# Noise floor (0 if no noise was added)
 nf = results[1].noise_floor
 
-println("\n  --- Optimal Iterations ---")
-println("    T1: iteration $opt_T1 (RMSRE=$(round(all_curves[1].rmsre_T1[opt_T1+1], digits=5)))")
-println("    T2: iteration $opt_T2 (RMSRE=$(round(all_curves[1].rmsre_T2[opt_T2+1], digits=5)))")
+println("\nOptimal Iterations")
+println("T1: iteration $opt_T1 (RMSRE=$(round(all_curves[1].rmsre_T1[opt_T1+1], digits=5)))")
+println("T2: iteration $opt_T2 (RMSRE=$(round(all_curves[1].rmsre_T2[opt_T2+1], digits=5)))")
 if nf > 0
     println("    Noise floor: $nf")
 end
-
-# ── Plot: Cost vs iteration ──────────────────────────────────
 
 figure(figsize=(5, 4))
 for (i, r) in enumerate(results)
@@ -171,7 +164,7 @@ end
 if nf > 0
     axhline(y=nf, color="gray", linewidth=1.5, label="Noise floor (½‖η‖²)")
 end
-# Mark optimal on cost curve
+
 opt_cost = vec(results[1].output.f)[opt_T1+1]
 plot(opt_T1, opt_cost, "X", color="black", markersize=8, markeredgewidth=2, label="Optimal (iter $opt_T1)", zorder=10)
 xlabel("Iteration"); ylabel("Cost (a.u.)")
@@ -179,19 +172,15 @@ title("Cost vs Iteration")
 xticks(0:max_iter); legend(); grid(true, alpha=0.3)
 tight_layout()
 savefig(joinpath(outdir, "cost_vs_iteration.png"), dpi=600)
-println("\n  Saved: cost_vs_iteration.png")
+println("\n Saved: cost_vs_iteration.png")
 
-# Shared y-axis for RMSRE: min/max across T1 and T2
 rmsre_all_vals = vcat([vcat(c.rmsre_T1, c.rmsre_T2) for c in all_curves]...)
 rmsre_ymin = minimum(rmsre_all_vals) * 0.9
 rmsre_ymax = maximum(rmsre_all_vals) * 1.1
 
-# Shared y-axis for Efficiency: min/max across T1 and T2 (skip iter 0)
 eff_all_vals = vcat([vcat(c.tnr_T1[2:end] ./ sqrt_Tscan, c.tnr_T2[2:end] ./ sqrt_Tscan) for c in all_curves]...)
 eff_ymin = minimum(eff_all_vals) * 0.9
 eff_ymax = maximum(eff_all_vals) * 1.1
-
-# ── Plot: T1 RMSRE vs iteration ──────────────────────────────
 
 figure(figsize=(5, 4))
 for (i, (r, c)) in enumerate(zip(results, all_curves))
@@ -205,9 +194,7 @@ title("T1 RMSRE vs Iteration")
 xticks(0:max_iter); legend(); grid(true, alpha=0.3)
 tight_layout()
 savefig(joinpath(outdir, "rmsre_T1_vs_iteration.png"), dpi=600)
-println("  Saved: rmsre_T1_vs_iteration.png")
-
-# ── Plot: T2 RMSRE vs iteration ──────────────────────────────
+println("Saved: rmsre_T1_vs_iteration.png")
 
 figure(figsize=(5, 4))
 for (i, (r, c)) in enumerate(zip(results, all_curves))
@@ -221,9 +208,7 @@ title("T2 RMSRE vs Iteration")
 xticks(0:max_iter); legend(); grid(true, alpha=0.3)
 tight_layout()
 savefig(joinpath(outdir, "rmsre_T2_vs_iteration.png"), dpi=600)
-println("  Saved: rmsre_T2_vs_iteration.png")
-
-# ── Plot: T1 Efficiency vs iteration (skip iter 0) ───────────
+println("Saved: rmsre_T2_vs_iteration.png")
 
 figure(figsize=(5, 4))
 for (i, (r, c)) in enumerate(zip(results, all_curves))
@@ -238,9 +223,7 @@ title("T1 Efficiency vs Iteration")
 xticks(1:max_iter); legend(); grid(true, alpha=0.3)
 tight_layout()
 savefig(joinpath(outdir, "efficiency_T1_vs_iteration.png"), dpi=600)
-println("  Saved: efficiency_T1_vs_iteration.png")
-
-# ── Plot: T2 Efficiency vs iteration (skip iter 0) ───────────
+println(" Saved: efficiency_T1_vs_iteration.png")
 
 figure(figsize=(5, 4))
 for (i, (r, c)) in enumerate(zip(results, all_curves))
@@ -255,9 +238,7 @@ title("T2 Efficiency vs Iteration")
 xticks(1:max_iter); legend(); grid(true, alpha=0.3)
 tight_layout()
 savefig(joinpath(outdir, "efficiency_T2_vs_iteration.png"), dpi=600)
-println("  Saved: efficiency_T2_vs_iteration.png")
-
-# ── Plot: Ground truth parameter maps (standalone) ───────────
+println("Saved: efficiency_T2_vs_iteration.png")
 
 cmap_lipari = PythonPlot.ColorMap("lipari",
     QMRIColors.relaxationColorMap("T1"),
@@ -271,16 +252,14 @@ imshow(gt.T₁, clim=(0, 2.5), cmap=cmap_lipari, aspect="equal")
 title("Ground Truth T1 [s]"); colorbar()
 tight_layout()
 savefig(joinpath(outdir, "ground_truth_T1.png"), dpi=600)
-println("  Saved: ground_truth_T1.png")
+println("Saved: ground_truth_T1.png")
 
 figure(figsize=(4, 4))
 imshow(gt.T₂, clim=(0, 0.35), cmap=cmap_navia, aspect="equal")
 title("Ground Truth T2 [s]"); colorbar()
 tight_layout()
 savefig(joinpath(outdir, "ground_truth_T2.png"), dpi=600)
-println("  Saved: ground_truth_T2.png")
-
-# ── Plot: Reconstructed + error maps per config (no GT) ──────
+println(" Saved: ground_truth_T2.png")
 
 for r in results
     n_iters = size(r.output.f, 2)
@@ -307,10 +286,8 @@ for r in results
     tight_layout()
     fname = "parammap_$(replace(lowercase(r.label), " " => "_")).png"
     savefig(joinpath(outdir, fname), dpi=600)
-    println("  Saved: $fname")
+    println("Saved: $fname")
 end
-
-# ── CSV output for paper tables ───────────────────────────────
 
 # Cost vs iteration
 open(joinpath(outdir, "cost_vs_iteration.csv"), "w") do io
@@ -329,9 +306,9 @@ open(joinpath(outdir, "cost_vs_iteration.csv"), "w") do io
         println(io, row)
     end
 end
-println("  Saved: cost_vs_iteration.csv")
+println("Saved: cost_vs_iteration.csv")
 
-# RMSRE vs iteration (one column per config)
+# RMSRE vs iteration 
 open(joinpath(outdir, "rmsre_vs_iteration.csv"), "w") do io
     header = "iteration"
     for r in results
@@ -349,9 +326,9 @@ open(joinpath(outdir, "rmsre_vs_iteration.csv"), "w") do io
         println(io, row)
     end
 end
-println("  Saved: rmsre_vs_iteration.csv")
+println("Saved: rmsre_vs_iteration.csv")
 
-# TnNR vs iteration
+# efficiency vs iteration
 open(joinpath(outdir, "efficiency_vs_iteration.csv"), "w") do io
     header = "iteration"
     for r in results
@@ -369,9 +346,9 @@ open(joinpath(outdir, "efficiency_vs_iteration.csv"), "w") do io
         println(io, row)
     end
 end
-println("  Saved: efficiency_vs_iteration.csv")
+println("Saved: efficiency_vs_iteration.csv")
 
-# MARE summary
+# MARE
 open(joinpath(outdir, "mare_summary.csv"), "w") do io
     println(io, "config,T1_MARE_pct,T2_MARE_pct")
     for r in results
@@ -382,6 +359,6 @@ open(joinpath(outdir, "mare_summary.csv"), "w") do io
         println(io, "$(r.label),$(round(mare_T1, digits=4)),$(round(mare_T2, digits=4))")
     end
 end
-println("  Saved: mare_summary.csv")
+println("Saved: mare_summary.csv")
 
-println("\n=== Comparison complete ===")
+println("\nComparison complete")
