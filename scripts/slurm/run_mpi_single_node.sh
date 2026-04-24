@@ -7,8 +7,7 @@
 #SBATCH --error=mrstat_mpi_%j.err
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=4
-#SBATCH --gres=gpu:4
-#SBATCH --exclude=node[016-020]
+#SBATCH --gres=gpu:A4000:4
 #SBATCH --time=01:00:00
 
 module load julia/1.10.3
@@ -18,6 +17,10 @@ module load openmpi4/4.1.6-cuda
 export JULIA_DEPOT_PATH="/var/scratch/iwang3/julia_depot"
 export JULIA_CONDAPKG_ENV="/var/scratch/iwang3/condapkg_env"
 export MPLBACKEND="agg"
+
+# Single-node: shared memory only, no network needed
+export UCX_TLS=posix,sm,self
+export UCX_NET_DEVICES=""
 
 cd /home/iwang3/mrstat_main
 

@@ -28,7 +28,7 @@ function solver(objective, x0, LB, UB, options::SolverOptions, plotfun)
     options.save_every_iter && write_to_disk(state)
 
     # 在进入 while 前打开 CSV
-    iterlog = open("solver_iter_breakdown.csv", "w")
+    iterlog = open("solver_iter_breakdown_single_gpu.csv", "w")
     println(iterlog, "iter,t_iter_ms,t_obj_ms,t_precond_ms,t_steihaug_ms,t_choose_ms,t_evalnew_ms")
 
     while ((iter < (options.max_iter_trf + 1)) && (!converged))
@@ -42,13 +42,14 @@ function solver(objective, x0, LB, UB, options::SolverOptions, plotfun)
 
         t_iter = time()
         # 1) 目标与导数
-        t0 = time()
 
         if iter > 1
+            t0 = time()
             println("    Calling f,r,g,H = objective(x,2)")
             f, r, g, H = objective(x, 2)
+            t_obj = (time() - t0) * 1000
         end
-        t_obj = (time() - t0) * 1000
+        # iter == 1 时 t_obj 保留循环前（第 11 行）的初始 objective 耗时
 
         println("    f: $(f)",)
         println("    Δ: $(Δ)")
