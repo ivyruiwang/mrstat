@@ -1,13 +1,4 @@
 #!/usr/bin/env julia
-# ============================================================================
-# Plot problem size scaling results
-# Produces:
-#   - Wall-time vs N² (one line per GPU count)
-#   - Speedup vs N² (relative to 1 GPU at each N)
-#   - CSV summary table
-#
-# Usage: julia --project=. scripts/problem_size_scaling/plot_problem_size.jl <results_dir>
-# ============================================================================
 
 using Pkg
 Pkg.activate(joinpath(@__DIR__, "..", ".."))
@@ -24,7 +15,6 @@ results_dir = ARGS[1]
 outdir = joinpath(results_dir, "analysis")
 mkpath(outdir)
 
-# ── Scan for result files ────────────────────────────────────
 
 struct PSResult
     N::Int
@@ -45,14 +35,11 @@ end
 sort!(results, by=r -> (r.ngpus, r.N))
 
 println("=== Problem Size Scaling Results ===")
-println("  Found $(length(results)) result files")
+println("Found $(length(results)) result files")
 
-# ── Group by GPU count ───────────────────────────────────────
 
 gpu_counts = sort(unique(r.ngpus for r in results))
 println("  GPU configs: ", gpu_counts)
-
-# ── Save CSV ─────────────────────────────────────────────────
 
 open(joinpath(outdir, "problem_size_summary.csv"), "w") do io
     println(io, "N,N_squared,ngpus,nnodes,wall_time_s,speedup")
@@ -70,7 +57,6 @@ open(joinpath(outdir, "problem_size_summary.csv"), "w") do io
 end
 println("  Saved: problem_size_summary.csv")
 
-# Print table
 println("\n  N      | N²      | GPUs | Nodes | Wall-time (s) | Speedup")
 println("  ", "-"^65)
 for r in results
@@ -84,8 +70,6 @@ for r in results
     speedup = t1 !== nothing ? t1 / r.wall_time : NaN
     println("  $(rpad(r.N, 7))| $(rpad(r.N^2, 8))| $(rpad(r.ngpus, 5))| $(rpad(r.nnodes, 6))| $(rpad(round(r.wall_time, digits=1), 14))| $(round(speedup, digits=2))")
 end
-
-# ── Plot 1: Wall-time vs N² ─────────────────────────────────
 
 markers = ["o-", "s--", "^-.", "d:", "v-"]
 colors = ["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:purple"]
@@ -106,8 +90,6 @@ legend(); grid(true, alpha=0.3)
 tight_layout()
 savefig(joinpath(outdir, "walltime_vs_N2.png"), dpi=600)
 println("\n  Saved: walltime_vs_N2.png")
-
-# ── Plot 2: Speedup vs N² ───────────────────────────────────
 
 figure(figsize=(6, 5))
 for (i, ng) in enumerate(gpu_counts)
