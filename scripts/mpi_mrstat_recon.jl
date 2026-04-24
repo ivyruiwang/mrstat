@@ -1,16 +1,10 @@
 #!/usr/bin/env julia
-# ============================================================================
-# Distributed Solver — MPI MRSTAT Reconstruction
-# Run commands below on SLURM:
-# sbatch scripts/slurm/run_mpi_single_node.sh
-# sbatch scripts/slurm/run_mpi_multi_node.sh
-# ============================================================================
 
 using MPI
 MPI.Init()
 
 using Pkg
-Pkg.activate(joinpath(@__DIR__, ".."))   # activate mrstat_main project
+Pkg.activate(joinpath(@__DIR__, ".."))   
 
 using CUDA
 using BlochSimulators
@@ -23,7 +17,6 @@ using ComputationalResources: AbstractResource, CUDALibs
 using LinearAlgebra, LinearMaps, StaticArrays, StructArrays, Statistics
 using JLD2
 
-# Load MPI + distributed solver definitions
 include(joinpath(@__DIR__, "..", "src", "mpi", "MPIResources.jl"))
 include(joinpath(@__DIR__, "..", "src", "mpi", "mpi_objective.jl"))
 include(joinpath(@__DIR__, "..", "src", "mpi", "mpi_utils.jl"))
@@ -40,7 +33,6 @@ rank == 0 && println("    Ranks: $nranks")
 println("    Rank $rank → GPU $(res.local_gpu_id) ($(CUDA.name(CUDA.device())))")
 MPI.Barrier(comm)
 
-# Data Generation
 # All ranks generate identical data then partition voxel-wise
 rank == 0 && println("\nGenerating simulation data...")
 using Random; Random.seed!(42)   # !!! MUST fixed seed so all ranks generate exactly same phantom
@@ -51,13 +43,12 @@ N = isqrt(total_nvox)
 
 rank == 0 && println("    Image: $N × $N ($total_nvox voxels)")
 
-# # Add complex Gaussian noise (SNR_dB = 15.36, matching original paper)
-# # All ranks use same seed → same noise → same corrupted data
+# # Add complex Gaussian noise (SNR_dB = 15.36, according to oscar paper)
 # SNR_dB = 15.36
 # raw_data_cpu = Array(raw_data)
 # rms_signal = sqrt(mean(abs.(raw_data_cpu) .^ 2))
 # rms_noise = Float32(rms_signal / sqrt(10^(SNR_dB / 10)))
-# Random.seed!(123)   # separate seed for noise (same across all ranks)
+# Random.seed!(123)   # same across all ranks
 # noise = rms_noise * randn(ComplexF32, size(raw_data_cpu))
 # noise_floor = Float64(0.5 * sum(abs.(noise) .^ 2))
 # raw_data = gpu(raw_data_cpu .+ noise)
@@ -75,7 +66,7 @@ local_tx     = ones(Float32, local_nvox)   # uniform transmit field
 MPI.Barrier(comm)
 rank == 0 && println("Data partitioned.\n")
 
-# Optimization — local vectors
+
 x0_per = Float32[log(1.0), log(0.100), 1.0, 0.0]
 LB_per = Float32[log(0.1), log(0.001), -Inf, -Inf]
 UB_per = Float32[log(7.0), log(3.000),  Inf,  Inf]
@@ -86,7 +77,6 @@ UB = repeat(UB_per', local_nvox) |> vec
 
 transmit_field_full = ones(Float32, total_nvox)
 
-# plotfun receives global x (already gathered by mpi_solver)
 nnodes_cfg = parse(Int, get(ENV, "SLURM_NNODES", "1"))
 config_tag = "$(nnodes_cfg)n$(nranks)g"
 
@@ -95,7 +85,6 @@ plotfun(x, figtitle) = if is_root(res)
     MRSTAT.plot_T₁T₂ρ(physical, N, N, "$(config_tag)_$(figtitle)")
 end
 
-# Initial plot needs gather
 x0_full = mpi_gather_field_major(x0, local_nvox, total_nvox, comm)
 plotfun(x0_full, "Initial Guess")
 
@@ -106,8 +95,6 @@ objfun = (x_local, mode) -> mpi_objective(
 )
 
 trf_opts = TrustRegionReflective.SolverOptions()
-
-# Run Reconstruction
 
 rank == 0 && println("Running distributed TRF solver …\n")
 MPI.Barrier(comm)
@@ -121,7 +108,6 @@ if is_root(res)
     println("    Final cost: $(output.f[end])")
     println("    Iterations: $(size(output.f, 2))")
 
-    # Save results + ground truth for comparison
     Random.seed!(42)
     ground_truth = MRSTAT.make_phantom(N)
     transmit_field = transmit_field_full
@@ -135,9 +121,13 @@ if is_root(res)
         "hostname" => gethostname(),
     )
     outfile = "results_mpi_$(nnodes)n$(nranks)g.jld2"
-    # jldsave(outfile; output, ground_truth, N, transmit_field, meta, noise_floor) # noisy phantom
-    jldsave(outfile; output, ground_truth, N, transmit_field, meta) # noiseless phantom
-    println("    Saved to: $outfile")
+
+    # noisy phantom
+    # jldsave(outfile; output, ground_truth, N, transmit_field, meta, noise_floor) 
+
+    # noiseless phantom
+    jldsave(outfile; output, ground_truth, N, transmit_field, meta) 
+    println("Saved to: $outfile")
 end
 
 MPI.Finalize()
