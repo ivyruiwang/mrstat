@@ -1,5 +1,4 @@
-# Distributed version of TrustRegionReflective/solver.jl
-# All vectors are local (local_nvox × 4). Cross-rank reductions use MPI primitives.
+# mpi version of solver
 
 using MRSTAT: TrustRegionReflective
 using TickTock
