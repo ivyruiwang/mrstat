@@ -1,10 +1,7 @@
 #!/usr/bin/env julia
-# ============================================================================
-# Single-GPU Reconstruction with configurable N (image size)
+
 # N is read from environment variable MRSTAT_N (default 224)
-#
-# Usage: MRSTAT_N=320 julia --project=. scripts/problem_size_scaling/single_gpu_recon_N.jl
-# ============================================================================
+
 
 using Pkg
 Pkg.activate(joinpath(@__DIR__, "..", ".."))
@@ -22,33 +19,33 @@ N_size = parse(Int, get(ENV, "MRSTAT_N", "224"))
 
 Random.seed!(42)
 
-println("=== Single-GPU Problem Size Scaling ===")
-println("    GPU: $(CUDA.name(CUDA.device()))")
-println("    N = $N_size")
+println("Single-GPU Problem Size Scaling ")
+println("GPU: $(CUDA.name(CUDA.device()))")
+println(" N = $N_size")
 
-# Generate data with specified N
-println("\nGenerating simulation data (N=$N_size)...")
+
+println("\nGenerating simulation data (N=$N_size)")
 raw_data, sequence, coords, coils, trajectory = MRSTAT.generate_simulation_data(; N=N_size)
 
 total_nvox = length(coords)
 N = isqrt(total_nvox)
-println("    Image: $N x $N ($total_nvox voxels)")
+println("Image: $N x $N ($total_nvox voxels)")
 
 Random.seed!(42)
 ground_truth = MRSTAT.make_phantom(N)
 
 transmit_field = ones(Float32, total_nvox)
 
-# Add complex Gaussian noise (SNR_dB = 15.36, matching original paper)
+# Add complex Gaussian noise
 SNR_dB = 15.36
 raw_data_cpu = Array(raw_data)
 rms_signal = sqrt(mean(abs.(raw_data_cpu) .^ 2))
 rms_noise = Float32(rms_signal / sqrt(10^(SNR_dB / 10)))
-Random.seed!(123)   # same noise seed as MPI scripts
+Random.seed!(123)  
 noise = rms_noise * randn(ComplexF32, size(raw_data_cpu))
 noise_floor = Float64(0.5 * sum(abs.(noise) .^ 2))
 raw_data = gpu(raw_data_cpu .+ noise)
-println("    Noise: SNR_dB=$SNR_dB, noise_floor=$noise_floor")
+println(" Noise: SNR_dB=$SNR_dB, noise_floor=$noise_floor")
 
 # Reconstruction
 println("\nRunning single-GPU TRF solver ...\n")
@@ -63,12 +60,10 @@ UB = repeat(UB_per', total_nvox) |> vec
 resource = CUDALibs()
 objfun = (x, mode) -> MRSTAT.objective(x, resource, mode, raw_data, sequence, coords, coils, trajectory, transmit_field)
 
-# No intermediate plots for benchmarking
 plotfun(x, figtitle) = nothing
 
 output = TrustRegionReflective.solver(objfun, x0, LB, UB, TrustRegionReflective.SolverOptions(), plotfun)
 
-# Save results
 outfile = "results_N$(N)_1gpu.jld2"
 meta = Dict(
     "ngpus"    => 1,
@@ -80,8 +75,8 @@ meta = Dict(
 )
 jldsave(outfile; output, ground_truth, N, transmit_field, meta, noise_floor)
 
-println("\n=== Done ===")
-println("    Final cost: $(output.f[end])")
-println("    Iterations: $(size(output.f, 2) - 1)")
-println("    Wall-time: $(output.t[end]) s")
-println("    Saved to: $outfile")
+println("\nDone")
+println("Final cost: $(output.f[end])")
+println("Iterations: $(size(output.f, 2) - 1)")
+println("Wall-time: $(output.t[end]) s")
+println("Saved to: $outfile")
