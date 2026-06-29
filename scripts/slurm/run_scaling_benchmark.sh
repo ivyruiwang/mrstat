@@ -1,8 +1,6 @@
 #!/bin/bash
-# ============================================================================
-# Scaling Benchmark: submit MPI jobs with 1, 2, 4, 8 GPUs (all A4000)
-# Usage: bash scripts/slurm/run_scaling_benchmark.sh
-# ============================================================================
+# submit MPI jobs with 1, 2, 4, 8 GPUs (all A4000)
+# bash scripts/slurm/run_scaling_benchmark.sh
 
 set -e
 cd /home/iwang3/mrstat_main
@@ -10,10 +8,6 @@ cd /home/iwang3/mrstat_main
 COMMON="--time=01:00:00 --partition=defq"
 SCRIPT="scripts/mpi_mrstat_recon.jl"
 
-echo "Submitting scaling benchmark jobs..."
-echo ""
-
-# # --- 1 GPU (1 node) ---
 # JOB1=$(sbatch --parsable \
 #     --job-name=mrstat-1g \
 #     --output=mrstat_scaling_1g_%j.out \
@@ -32,9 +26,8 @@ echo ""
 # cd /home/iwang3/mrstat_main
 # mpirun julia --project=. $SCRIPT
 # ")
-# echo "  1 GPU:  job $JOB1"
+# echo "1 GPU:  job $JOB1"
 
-# # --- 2 GPUs (1 node) ---
 # JOB2=$(sbatch --parsable \
 #     --job-name=mrstat-2g \
 #     --output=mrstat_scaling_2g_%j.out \
@@ -53,9 +46,8 @@ echo ""
 # cd /home/iwang3/mrstat_main
 # mpirun julia --project=. $SCRIPT
 # ")
-# echo "  2 GPUs: job $JOB2"
+# echo "2 GPUs: job $JOB2"
 
-# # --- 4 GPUs (1 node) ---
 # JOB4=$(sbatch --parsable \
 #     --job-name=mrstat-4g \
 #     --output=mrstat_scaling_4g_%j.out \
@@ -75,9 +67,8 @@ echo ""
 # cd /home/iwang3/mrstat_main
 # mpirun julia --project=. $SCRIPT
 # ")
-# echo "  4 GPUs: job $JOB4"
+# echo "4 GPUs: job $JOB4"
 
-# --- 6 GPUs (2 nodes, 3 per node) ---
 JOB6=$(sbatch --parsable \
     --job-name=mrstat-6g \
     --output=mrstat_scaling_6g_%j.out \
@@ -97,9 +88,8 @@ export UCX_NET_DEVICES=all
 cd /home/iwang3/mrstat_main
 mpirun --mca pml ob1 --mca btl tcp,self julia --project=. $SCRIPT
 ")
-echo "  6 GPUs: job $JOB6"
+echo "6 GPUs: job $JOB6"
 
-# # --- 8 GPUs (2 nodes) ---
 # JOB8=$(sbatch --parsable \
 #     --job-name=mrstat-8g \
 #     --output=mrstat_scaling_8g_%j.out \
@@ -119,8 +109,6 @@ echo "  6 GPUs: job $JOB6"
 # cd /home/iwang3/mrstat_main
 # mpirun --mca pml ob1 --mca btl tcp,self julia --project=. $SCRIPT
 # ")
-# echo "  8 GPUs: job $JOB8"
+# echo "8 GPUs: job $JOB8"
 
-echo ""
-echo "All jobs submitted. Monitor with: squeue -u \$USER"
 echo "After completion, run: julia --project=. scripts/plot_scaling.jl"

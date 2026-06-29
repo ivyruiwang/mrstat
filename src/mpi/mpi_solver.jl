@@ -1,17 +1,16 @@
-# Distributed version of TrustRegionReflective/solver.jl
-# All vectors are local (local_nvox × 4). Cross-rank reductions use MPI primitives.
+
+# All vectors are local (local_nvox × 4)
 
 using MRSTAT: TrustRegionReflective
 using TickTock
 
 function mpi_solver(objective, x0, LB, UB, options::TrustRegionReflective.SolverOptions,
-                    plotfun, comm, total_nvox)
+    plotfun, comm, total_nvox)
 
     rank = MPI.Comm_rank(comm)
     local_nvox = length(x0) ÷ 4
     total_length = total_nvox * 4
 
-    # Load the initial guess
     x = x0
 
     println("    Calling f,r,g,H = objective(x,2)")
@@ -28,13 +27,12 @@ function mpi_solver(objective, x0, LB, UB, options::TrustRegionReflective.Solver
     converged = false
     t = 0.0
 
-    # state stores global x via Allgather
     x_full = mpi_gather_field_major(x, local_nvox, total_nvox, comm)
     state = TrustRegionReflective.SolverOutput(x_full, f, r, t)
 
     options.save_every_iter && write_to_disk(state)
 
-    # CSV logging — only rank 0 writes to avoid file corruption
+    # CSV logging
     iterlog = nothing
     if rank == 0
         nnodes = parse(Int, get(ENV, "SLURM_NNODES", "1"))
@@ -62,7 +60,7 @@ function mpi_solver(objective, x0, LB, UB, options::TrustRegionReflective.Solver
         println("    f: $(f)",)
         println("    Δ: $(Δ)")
 
-        # Scaling matrices D, C, Ĥ — all local
+        # Scaling matrices D, C, Ĥ all local
         t0 = time()
         v, dv = mpi_computeDistanceToBoundaries(x, g, LB, UB, comm)
 

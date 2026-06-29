@@ -17,7 +17,7 @@ using BlochSimulators
 using BlochSimulators: f32, gpu
 using MRSTAT
 using MRSTAT: NUM_COILS, TrustRegionReflective, DerivativeOperations,
-              optim_to_physical_pars, plot_T₁T₂ρ
+    optim_to_physical_pars, plot_T₁T₂ρ
 using MRSTAT.DerivativeOperations: simulate_derivatives, Jv, Jᴴv
 using ComputationalResources: AbstractResource, CUDALibs
 using LinearAlgebra, LinearMaps, StaticArrays, StructArrays, Statistics
@@ -31,9 +31,9 @@ include(joinpath(@__DIR__, "..", "src", "mpi", "mpi_steihaug.jl"))
 include(joinpath(@__DIR__, "..", "src", "mpi", "mpi_solver.jl"))
 
 # MPI Setup
-res    = MPICUDALibs()
-comm   = res.comm
-rank   = res.rank
+res = MPICUDALibs()
+comm = res.comm
+rank = res.rank
 nranks = res.nranks
 rank == 0 && println("=== MPI MRSTAT Reconstruction (Distributed Solver) ===")
 rank == 0 && println("    Ranks: $nranks")
@@ -43,7 +43,8 @@ MPI.Barrier(comm)
 # Data Generation
 # All ranks generate identical data then partition voxel-wise
 rank == 0 && println("\nGenerating simulation data...")
-using Random; Random.seed!(42)   # !!! MUST fixed seed so all ranks generate exactly same phantom
+using Random;
+Random.seed!(42);   # !!! MUST fixed seed so all ranks generate exactly same phantom
 raw_data, sequence, coords_full, coils_full, trajectory = MRSTAT.generate_simulation_data()
 
 total_nvox = length(coords_full)
@@ -69,8 +70,8 @@ local_nvox = length(vr)
 println("    Rank $rank → voxels $(first(vr)):$(last(vr)) ($local_nvox voxels)")
 
 local_coords = partition_structarray(coords_full, vr)
-local_coils  = gpu(f32(Array(coils_full)[vr, :]))
-local_tx     = ones(Float32, local_nvox)   # uniform transmit field
+local_coils = gpu(f32(Array(coils_full)[vr, :]))
+local_tx = ones(Float32, local_nvox)   # uniform transmit field
 
 MPI.Barrier(comm)
 rank == 0 && println("Data partitioned.\n")
@@ -78,7 +79,7 @@ rank == 0 && println("Data partitioned.\n")
 # Optimization — local vectors
 x0_per = Float32[log(1.0), log(0.100), 1.0, 0.0]
 LB_per = Float32[log(0.1), log(0.001), -Inf, -Inf]
-UB_per = Float32[log(7.0), log(3.000),  Inf,  Inf]
+UB_per = Float32[log(7.0), log(3.000), Inf, Inf]
 
 x0 = repeat(x0_per', local_nvox) |> vec
 LB = repeat(LB_per', local_nvox) |> vec
@@ -90,10 +91,11 @@ transmit_field_full = ones(Float32, total_nvox)
 nnodes_cfg = parse(Int, get(ENV, "SLURM_NNODES", "1"))
 config_tag = "$(nnodes_cfg)n$(nranks)g"
 
-plotfun(x, figtitle) = if is_root(res)
-    physical = MRSTAT.optim_to_physical_pars(x, transmit_field_full)
-    MRSTAT.plot_T₁T₂ρ(physical, N, N, "$(config_tag)_$(figtitle)")
-end
+plotfun(x, figtitle) =
+    if is_root(res)
+        physical = MRSTAT.optim_to_physical_pars(x, transmit_field_full)
+        MRSTAT.plot_T₁T₂ρ(physical, N, N, "$(config_tag)_$(figtitle)")
+    end
 
 # Initial plot needs gather
 x0_full = mpi_gather_field_major(x0, local_nvox, total_nvox, comm)
@@ -128,10 +130,10 @@ if is_root(res)
 
     nnodes = parse(Int, get(ENV, "SLURM_NNODES", "1"))
     meta = Dict(
-        "ngpus"    => nranks,
-        "nnodes"   => nnodes,
-        "solver"   => "mpi",
-        "job_id"   => get(ENV, "SLURM_JOB_ID", "local"),
+        "ngpus" => nranks,
+        "nnodes" => nnodes,
+        "solver" => "mpi",
+        "job_id" => get(ENV, "SLURM_JOB_ID", "local"),
         "hostname" => gethostname(),
     )
     outfile = "results_mpi_$(nnodes)n$(nranks)g.jld2"

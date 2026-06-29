@@ -1,11 +1,8 @@
 #!/usr/bin/env julia
-# ============================================================================
+
 # Compare reconstruction results vs ground truth
-# Produces: parameter maps, absolute relative error maps, RMSRE curves,
-#           efficiency (TnNR) curves
-#
-# Usage: julia --project=. scripts/compare_results.jl results_single_gpu.jld2 results_mpi_1n4g.jld2 ...
-# ============================================================================
+# Produces: parameter maps, absolute relative error maps, RMSRE curves, efficiency (TnNR) curves
+# julia --project=. scripts/compare_results.jl xxx.jld2 yyy.jld2 zzz.jld2 ...
 
 using Pkg
 Pkg.activate(joinpath(@__DIR__, ".."))
@@ -16,11 +13,9 @@ using MRSTAT: optim_to_physical_pars
 using QMRIColors
 using ImagePhantoms
 
-# ── Load results ──────────────────────────────────────────────
-
 struct ReconResult
     output
-    ground_truth    # StructArray{T₁T₂ρˣρʸ}, shape (N, N)
+    ground_truth
     N::Int
     transmit_field
     meta::Dict
@@ -37,10 +32,6 @@ function load_result(path)
     return ReconResult(d["output"], d["ground_truth"], d["N"], d["transmit_field"], meta, label, nf)
 end
 
-if isempty(ARGS)
-    println("Usage: julia --project=. scripts/compare_results.jl <result1.jld2> <result2.jld2> ...")
-    exit(1)
-end
 
 results = [load_result(f) for f in ARGS]
 N = results[1].N
@@ -49,20 +40,10 @@ gt = results[1].ground_truth   # (N, N) StructArray from make_phantom
 outdir = "/home/iwang3/mrstat_main/analysis_results"
 mkpath(outdir)
 
-println("=== Reconstruction Comparison ===")
-println("    Image: $N x $N")
-println("    Configs: ", join([r.label for r in results], ", "))
-println("    Output:  $outdir/")
-
-# ── ROI from Shepp-Logan geometry (deterministic, no RNG needed) ──
-
 sl = shepp_logan(N, SheppLoganBrainWeb()) |> rotr90
 unique_vals = unique(sl)
 tissue_rois = [(val, findall(sl .== val)) for val in unique_vals if val != 0]
 roi_mask = vcat([roi for (_, roi) in tissue_rois]...)
-println("    ROIs: $(length(tissue_rois)) tissue types, $(length(roi_mask)) voxels")
-
-# ── Helpers ───────────────────────────────────────────────────
 
 function extract_params(x_all, transmit_field, N, iter)
     x = x_all[:, iter]
@@ -70,25 +51,21 @@ function extract_params(x_all, transmit_field, N, iter)
     return reshape(phys, N, N)
 end
 
-# RMSRE: root mean squared relative error (tissue ROI voxels only)
 function rmsre(recon, truth, mask)
     rel_err = (recon[mask] .- truth[mask]) ./ truth[mask]
     return sqrt(mean(rel_err .^ 2))
 end
 
-# Absolute relative error map (non-ROI voxels stay 0)
 function abs_rel_error_map(recon, truth, mask)
     err = zeros(size(truth))
     err[mask] = abs.(recon[mask] .- truth[mask]) ./ truth[mask]
     return err
 end
 
-# Mean absolute relative error (scalar, matches original paper Figure 7 annotation)
 function mare(recon, truth, mask)
     return mean(abs.(recon[mask] .- truth[mask]) ./ truth[mask])
 end
 
-# TnNR per ROI, averaged across all tissue types
 function mean_tnr(recon_map, rois)
     tnr_vals = Float64[]
     for (_, roi) in rois
@@ -99,68 +76,43 @@ function mean_tnr(recon_map, rois)
     return isempty(tnr_vals) ? 0.0 : mean(tnr_vals)
 end
 
-# ── RMSRE & TnNR vs iteration ────────────────────────────────
-
 function compute_curves(res, gt, roi_mask, tissue_rois)
     n_iters = size(res.output.f, 2)
     rmsre_T1 = zeros(n_iters)
     rmsre_T2 = zeros(n_iters)
-    tnr_T1   = zeros(n_iters)
-    tnr_T2   = zeros(n_iters)
+    tnr_T1 = zeros(n_iters)
+    tnr_T2 = zeros(n_iters)
     for k in 1:n_iters
         p = extract_params(res.output.x, res.transmit_field, res.N, k)
         rmsre_T1[k] = rmsre(p.T₁, gt.T₁, roi_mask)
         rmsre_T2[k] = rmsre(p.T₂, gt.T₂, roi_mask)
-        tnr_T1[k]   = mean_tnr(p.T₁, tissue_rois)
-        tnr_T2[k]   = mean_tnr(p.T₂, tissue_rois)
+        tnr_T1[k] = mean_tnr(p.T₁, tissue_rois)
+        tnr_T2[k] = mean_tnr(p.T₂, tissue_rois)
     end
     return (; rmsre_T1, rmsre_T2, tnr_T1, tnr_T2)
 end
 
 all_curves = [compute_curves(r, gt, roi_mask, tissue_rois) for r in results]
 
-# ── Print summary table ──────────────────────────────────────
-
-println("\n  --- RMSRE Summary ---")
 for (r, c) in zip(results, all_curves)
     best_T1 = argmin(c.rmsre_T1)
     best_T2 = argmin(c.rmsre_T2)
-    println("\n  $(r.label):")
-    println("    T1 RMSRE: min=$(round(c.rmsre_T1[best_T1], digits=5)) @iter $(best_T1-1), final=$(round(c.rmsre_T1[end], digits=5))")
-    println("    T2 RMSRE: min=$(round(c.rmsre_T2[best_T2], digits=5)) @iter $(best_T2-1), final=$(round(c.rmsre_T2[end], digits=5))")
 end
 
-println("\n  --- Efficiency (TnNR) Summary ---")
 for (r, c) in zip(results, all_curves)
     best_T1 = argmin(c.rmsre_T1)
     best_T2 = argmin(c.rmsre_T2)
-    println("\n  $(r.label):")
-    println("    T1 TnNR: @best=$(round(c.tnr_T1[best_T1], digits=1)), @final=$(round(c.tnr_T1[end], digits=1))")
-    println("    T2 TnNR: @best=$(round(c.tnr_T2[best_T2], digits=1)), @final=$(round(c.tnr_T2[end], digits=1))")
 end
-
-# ── Shared plot settings ──────────────────────────────────────
 
 markers = ["o-", "x--", "s-.", "d:", "^-", "v--"]
-T_scan = 11.2   # seconds (nTR * TR = 1120 * 0.01)
+T_scan = 11.2   # snTR * TR = 1120 * 0.01
 sqrt_Tscan = sqrt(T_scan)
 max_iter = maximum(size(r.output.f, 2) - 1 for r in results)
 
-# Optimal iteration: min RMSRE from first result (baseline)
-opt_T1 = argmin(all_curves[1].rmsre_T1) - 1   # 0-indexed iteration
+opt_T1 = argmin(all_curves[1].rmsre_T1) - 1   # 0-indexed
 opt_T2 = argmin(all_curves[1].rmsre_T2) - 1
 
-# Noise floor (0 if no noise was added)
 nf = results[1].noise_floor
-
-println("\n  --- Optimal Iterations ---")
-println("    T1: iteration $opt_T1 (RMSRE=$(round(all_curves[1].rmsre_T1[opt_T1+1], digits=5)))")
-println("    T2: iteration $opt_T2 (RMSRE=$(round(all_curves[1].rmsre_T2[opt_T2+1], digits=5)))")
-if nf > 0
-    println("    Noise floor: $nf")
-end
-
-# ── Plot: Cost vs iteration ──────────────────────────────────
 
 figure(figsize=(5, 4))
 for (i, r) in enumerate(results)
@@ -171,27 +123,26 @@ end
 if nf > 0
     axhline(y=nf, color="gray", linewidth=1.5, label="Noise floor (½‖η‖²)")
 end
-# Mark optimal on cost curve
+
 opt_cost = vec(results[1].output.f)[opt_T1+1]
 plot(opt_T1, opt_cost, "X", color="black", markersize=8, markeredgewidth=2, label="Optimal (iter $opt_T1)", zorder=10)
-xlabel("Iteration"); ylabel("Cost (a.u.)")
+xlabel("Iteration");
+ylabel("Cost (a.u.)")
 title("Cost vs Iteration")
-xticks(0:max_iter); legend(); grid(true, alpha=0.3)
+xticks(0:max_iter);
+legend();
+grid(true, alpha=0.3)
 tight_layout()
 savefig(joinpath(outdir, "cost_vs_iteration.png"), dpi=600)
-println("\n  Saved: cost_vs_iteration.png")
+println("Saved: cost_vs_iteration.png")
 
-# Shared y-axis for RMSRE: min/max across T1 and T2
 rmsre_all_vals = vcat([vcat(c.rmsre_T1, c.rmsre_T2) for c in all_curves]...)
 rmsre_ymin = minimum(rmsre_all_vals) * 0.9
 rmsre_ymax = maximum(rmsre_all_vals) * 1.1
 
-# Shared y-axis for Efficiency: min/max across T1 and T2 (skip iter 0)
 eff_all_vals = vcat([vcat(c.tnr_T1[2:end] ./ sqrt_Tscan, c.tnr_T2[2:end] ./ sqrt_Tscan) for c in all_curves]...)
 eff_ymin = minimum(eff_all_vals) * 0.9
 eff_ymax = maximum(eff_all_vals) * 1.1
-
-# ── Plot: T1 RMSRE vs iteration ──────────────────────────────
 
 figure(figsize=(5, 4))
 for (i, (r, c)) in enumerate(zip(results, all_curves))
@@ -200,14 +151,15 @@ for (i, (r, c)) in enumerate(zip(results, all_curves))
 end
 plot(opt_T1, all_curves[1].rmsre_T1[opt_T1+1], "X", color="black", markersize=8, markeredgewidth=2, label="Optimal (iter $opt_T1)", zorder=10)
 ylim(rmsre_ymin, rmsre_ymax)
-xlabel("Iteration"); ylabel("RMSRE (a.u.)")
+xlabel("Iteration");
+ylabel("RMSRE (a.u.)")
 title("T1 RMSRE vs Iteration")
-xticks(0:max_iter); legend(); grid(true, alpha=0.3)
+xticks(0:max_iter);
+legend();
+grid(true, alpha=0.3)
 tight_layout()
 savefig(joinpath(outdir, "rmsre_T1_vs_iteration.png"), dpi=600)
-println("  Saved: rmsre_T1_vs_iteration.png")
-
-# ── Plot: T2 RMSRE vs iteration ──────────────────────────────
+println("Saved: rmsre_T1_vs_iteration.png")
 
 figure(figsize=(5, 4))
 for (i, (r, c)) in enumerate(zip(results, all_curves))
@@ -216,14 +168,15 @@ for (i, (r, c)) in enumerate(zip(results, all_curves))
 end
 plot(opt_T2, all_curves[1].rmsre_T2[opt_T2+1], "X", color="black", markersize=8, markeredgewidth=2, label="Optimal (iter $opt_T2)", zorder=10)
 ylim(rmsre_ymin, rmsre_ymax)
-xlabel("Iteration"); ylabel("RMSRE (a.u.)")
+xlabel("Iteration");
+ylabel("RMSRE (a.u.)")
 title("T2 RMSRE vs Iteration")
-xticks(0:max_iter); legend(); grid(true, alpha=0.3)
+xticks(0:max_iter);
+legend();
+grid(true, alpha=0.3)
 tight_layout()
 savefig(joinpath(outdir, "rmsre_T2_vs_iteration.png"), dpi=600)
-println("  Saved: rmsre_T2_vs_iteration.png")
-
-# ── Plot: T1 Efficiency vs iteration (skip iter 0) ───────────
+println("Saved: rmsre_T2_vs_iteration.png")
 
 figure(figsize=(5, 4))
 for (i, (r, c)) in enumerate(zip(results, all_curves))
@@ -233,14 +186,15 @@ end
 eff_opt_T1 = all_curves[1].tnr_T1[opt_T1+1] / sqrt_Tscan
 plot(opt_T1, eff_opt_T1, "X", color="black", markersize=8, markeredgewidth=2, label="Optimal (iter $opt_T1)", zorder=10)
 ylim(eff_ymin, eff_ymax)
-xlabel("Iteration"); ylabel("Efficiency (a.u.)")
+xlabel("Iteration");
+ylabel("Efficiency (a.u.)")
 title("T1 Efficiency vs Iteration")
-xticks(1:max_iter); legend(); grid(true, alpha=0.3)
+xticks(1:max_iter);
+legend();
+grid(true, alpha=0.3)
 tight_layout()
 savefig(joinpath(outdir, "efficiency_T1_vs_iteration.png"), dpi=600)
-println("  Saved: efficiency_T1_vs_iteration.png")
-
-# ── Plot: T2 Efficiency vs iteration (skip iter 0) ───────────
+println("Saved: efficiency_T1_vs_iteration.png")
 
 figure(figsize=(5, 4))
 for (i, (r, c)) in enumerate(zip(results, all_curves))
@@ -250,14 +204,15 @@ end
 eff_opt_T2 = all_curves[1].tnr_T2[opt_T2+1] / sqrt_Tscan
 plot(opt_T2, eff_opt_T2, "X", color="black", markersize=8, markeredgewidth=2, label="Optimal (iter $opt_T2)", zorder=10)
 ylim(eff_ymin, eff_ymax)
-xlabel("Iteration"); ylabel("Efficiency (a.u.)")
+xlabel("Iteration");
+ylabel("Efficiency (a.u.)")
 title("T2 Efficiency vs Iteration")
-xticks(1:max_iter); legend(); grid(true, alpha=0.3)
+xticks(1:max_iter);
+legend();
+grid(true, alpha=0.3)
 tight_layout()
 savefig(joinpath(outdir, "efficiency_T2_vs_iteration.png"), dpi=600)
-println("  Saved: efficiency_T2_vs_iteration.png")
-
-# ── Plot: Ground truth parameter maps (standalone) ───────────
+println("Saved: efficiency_T2_vs_iteration.png")
 
 cmap_lipari = PythonPlot.ColorMap("lipari",
     QMRIColors.relaxationColorMap("T1"),
@@ -268,19 +223,19 @@ cmap_navia = PythonPlot.ColorMap("navia",
 
 figure(figsize=(4, 4))
 imshow(gt.T₁, clim=(0, 2.5), cmap=cmap_lipari, aspect="equal")
-title("Ground Truth T1 [s]"); colorbar()
+title("Ground Truth T1 [s]");
+colorbar()
 tight_layout()
 savefig(joinpath(outdir, "ground_truth_T1.png"), dpi=600)
-println("  Saved: ground_truth_T1.png")
+println("Saved: ground_truth_T1.png")
 
 figure(figsize=(4, 4))
 imshow(gt.T₂, clim=(0, 0.35), cmap=cmap_navia, aspect="equal")
-title("Ground Truth T2 [s]"); colorbar()
+title("Ground Truth T2 [s]");
+colorbar()
 tight_layout()
 savefig(joinpath(outdir, "ground_truth_T2.png"), dpi=600)
-println("  Saved: ground_truth_T2.png")
-
-# ── Plot: Reconstructed + error maps per config (no GT) ──────
+println("Saved: ground_truth_T2.png")
 
 for r in results
     n_iters = size(r.output.f, 2)
@@ -294,25 +249,30 @@ for r in results
     figure(figsize=(8, 8))
     suptitle("$(r.label) — Iteration $(n_iters-1)")
 
-    subplot(2, 2, 1); imshow(p.T₁, clim=(0, 2.5), cmap=cmap_lipari)
-    title("Reconstructed T1 [s]"); colorbar()
-    subplot(2, 2, 2); imshow(err_T1 .* 100, clim=(0, 10), cmap="hot")
-    title("Rel. Error (MARE=$(round(mare_T1*100, digits=2))%)"); colorbar()
+    subplot(2, 2, 1);
+    imshow(p.T₁, clim=(0, 2.5), cmap=cmap_lipari)
+    title("Reconstructed T1 [s]");
+    colorbar()
+    subplot(2, 2, 2);
+    imshow(err_T1 .* 100, clim=(0, 10), cmap="hot")
+    title("Rel. Error (MARE=$(round(mare_T1*100, digits=2))%)");
+    colorbar()
 
-    subplot(2, 2, 3); imshow(p.T₂, clim=(0, 0.35), cmap=cmap_navia)
-    title("Reconstructed T2 [s]"); colorbar()
-    subplot(2, 2, 4); imshow(err_T2 .* 100, clim=(0, 10), cmap="hot")
-    title("Rel. Error (MARE=$(round(mare_T2*100, digits=2))%)"); colorbar()
+    subplot(2, 2, 3);
+    imshow(p.T₂, clim=(0, 0.35), cmap=cmap_navia)
+    title("Reconstructed T2 [s]");
+    colorbar()
+    subplot(2, 2, 4);
+    imshow(err_T2 .* 100, clim=(0, 10), cmap="hot")
+    title("Rel. Error (MARE=$(round(mare_T2*100, digits=2))%)");
+    colorbar()
 
     tight_layout()
     fname = "parammap_$(replace(lowercase(r.label), " " => "_")).png"
     savefig(joinpath(outdir, fname), dpi=600)
-    println("  Saved: $fname")
+    println("Saved: $fname")
 end
 
-# ── CSV output for paper tables ───────────────────────────────
-
-# Cost vs iteration
 open(joinpath(outdir, "cost_vs_iteration.csv"), "w") do io
     header = "iteration"
     for r in results
@@ -329,9 +289,8 @@ open(joinpath(outdir, "cost_vs_iteration.csv"), "w") do io
         println(io, row)
     end
 end
-println("  Saved: cost_vs_iteration.csv")
+println("Saved: cost_vs_iteration.csv")
 
-# RMSRE vs iteration (one column per config)
 open(joinpath(outdir, "rmsre_vs_iteration.csv"), "w") do io
     header = "iteration"
     for r in results
@@ -349,9 +308,8 @@ open(joinpath(outdir, "rmsre_vs_iteration.csv"), "w") do io
         println(io, row)
     end
 end
-println("  Saved: rmsre_vs_iteration.csv")
+println("Saved: rmsre_vs_iteration.csv")
 
-# TnNR vs iteration
 open(joinpath(outdir, "efficiency_vs_iteration.csv"), "w") do io
     header = "iteration"
     for r in results
@@ -369,9 +327,8 @@ open(joinpath(outdir, "efficiency_vs_iteration.csv"), "w") do io
         println(io, row)
     end
 end
-println("  Saved: efficiency_vs_iteration.csv")
+println("Saved: efficiency_vs_iteration.csv")
 
-# MARE summary
 open(joinpath(outdir, "mare_summary.csv"), "w") do io
     println(io, "config,T1_MARE_pct,T2_MARE_pct")
     for r in results
@@ -379,9 +336,8 @@ open(joinpath(outdir, "mare_summary.csv"), "w") do io
         p = extract_params(r.output.x, r.transmit_field, r.N, n_iters)
         mare_T1 = mare(p.T₁, gt.T₁, roi_mask) * 100
         mare_T2 = mare(p.T₂, gt.T₂, roi_mask) * 100
-        println(io, "$(r.label),$(round(mare_T1, digits=4)),$(round(mare_T2, digits=4))")
     end
 end
-println("  Saved: mare_summary.csv")
+println("Saved: mare_summary.csv")
 
-println("\n=== Comparison complete ===")
+println("Comparison completed")

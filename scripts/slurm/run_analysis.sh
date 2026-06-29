@@ -1,20 +1,6 @@
 #!/bin/bash
-# ============================================================================
-# Run analysis scripts on a GPU compute node
-# Step 1: compare_results.jl — correctness validation
-# Step 2: plot_scaling.jl — scaling law
-# Step 3: plot_parammap_figure.jl — noisy parameter map figure (if noisy)
-# Step 4: plot_parammap_noiseless.jl — noiseless parameter map figure (if noiseless)
-#
-# Usage: bash scripts/slurm/run_analysis.sh <results_dir>
-# Example: bash scripts/slurm/run_analysis.sh /home/iwang3/mrstat_main/noisy_results
-# ============================================================================
 
-if [ -z "$1" ]; then
-    echo "Usage: bash scripts/slurm/run_analysis.sh <results_dir>"
-    echo "  results_dir: directory containing .jld2 and .csv result files"
-    exit 1
-fi
+# bash scripts/slurm/run_analysis.sh <results_dir>
 
 RESULTS_DIR="$1"
 
@@ -37,7 +23,7 @@ HAS_NOISE=\$(julia --project=. -e '
 ')
 echo \"Noise detected: \${HAS_NOISE}\"
 
-echo '=== Step 1: Correctness Validation ==='
+echo 'Step 1: Correctness Validation '
 julia --project=. scripts/compare_results.jl \\
     ${RESULTS_DIR}/results_single_gpu.jld2 \\
     ${RESULTS_DIR}/results_mpi_1n2g.jld2 \\
@@ -46,7 +32,7 @@ julia --project=. scripts/compare_results.jl \\
     ${RESULTS_DIR}/results_mpi_2n8g.jld2
 
 echo ''
-echo '=== Step 2: Scaling Analysis ==='
+echo 'Step 2: Scaling Analysis '
 julia --project=. scripts/plot_scaling.jl \\
     ${RESULTS_DIR}/results_mpi_1n1g.jld2 \\
     ${RESULTS_DIR}/results_mpi_1n2g.jld2 \\
@@ -56,30 +42,27 @@ julia --project=. scripts/plot_scaling.jl \\
 
 if [ \"\${HAS_NOISE}\" = \"yes\" ]; then
     echo ''
-    echo '=== Step 3: Noisy Parameter Map Figure ==='
+    echo 'Step 3: Noisy Parameter Map Figure '
     julia --project=. scripts/plot_parammap_figure.jl \\
         ${RESULTS_DIR}/results_single_gpu.jld2 \\
         ${RESULTS_DIR}/results_mpi_1n4g.jld2 \\
         ${RESULTS_DIR}/results_mpi_2n8g.jld2
 else
     echo ''
-    echo '=== Step 3: Skipped (no noise) ==='
+    echo 'Step 3: Skipped (no noise) '
 fi
 
 if [ \"\${HAS_NOISE}\" = \"no\" ]; then
     echo ''
-    echo '=== Step 4: Noiseless Parameter Map Figure ==='
+    echo 'Step 4: Noiseless Parameter Map Figure '
     julia --project=. scripts/plot_parammap_noiseless.jl \\
         ${RESULTS_DIR}/results_single_gpu.jld2 \\
         ${RESULTS_DIR}/results_mpi_1n4g.jld2 \\
         ${RESULTS_DIR}/results_mpi_2n8g.jld2
 else
     echo ''
-    echo '=== Step 4: Skipped (has noise) ==='
+    echo 'Step 4: Skipped (has noise) '
 fi
 
-echo ''
-echo '=== Analysis complete ==='
-echo 'Output files:'
 ls -la /home/iwang3/mrstat_main/analysis_results/ 2>/dev/null
 "

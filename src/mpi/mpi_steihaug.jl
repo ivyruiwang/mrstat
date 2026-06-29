@@ -1,15 +1,11 @@
-# Distributed version of TrustRegionReflective/steihaug.jl
-# All norm/dot operations use MPI distributed primitives
 
 function mpi_steihaug(H, g, Δ, P, maxit, tol, z0, total_length, comm)
 
-    # Algorithm 7.2 of Nocedal & Wright, distributed version
-
     println("    Steihaug CG:")
     ϵ = eps()
-    # Use total_length (global element count) for the tolerance heuristic,
-    # not length(g) which is local in distributed mode
-    η = min( tol, mpi_norm(g, comm) / total_length )
+
+    # Use total_length (global element count) 
+    η = min(tol, mpi_norm(g, comm) / total_length)
 
     tol = η * mpi_norm(g, comm)
 
@@ -47,7 +43,7 @@ function mpi_steihaug(H, g, Δ, P, maxit, tol, z0, total_length, comm)
         z_new = z + α * d
 
         if mpi_norm(z_new, comm) > Δ
-            println("        Fell out of trust radius after iteration $(iter)" )
+            println("        Fell out of trust radius after iteration $(iter)")
             τ = mpi_distanceToTrustRegion(z, d, Δ, comm)
             append!(steps, z + τ * d)
             break
@@ -63,8 +59,8 @@ function mpi_steihaug(H, g, Δ, P, maxit, tol, z0, total_length, comm)
         end
 
         Y_new = P(r_new)
-        β    = mpi_dot(Y_new, r_new, comm) / mpi_dot(Y, r, comm)
-        d_new   = -Y_new + β * d
+        β = mpi_dot(Y_new, r_new, comm) / mpi_dot(Y, r, comm)
+        d_new = -Y_new + β * d
 
         r = r_new
         d = d_new

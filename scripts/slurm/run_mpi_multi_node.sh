@@ -1,7 +1,7 @@
 #!/bin/bash
-# ============================================================================
+
 #  sbatch scripts/slurm/run_mpi_multi_node.sh
-# ============================================================================
+
 #SBATCH --job-name=mrstat-mpi-mn
 #SBATCH --output=mrstat_mpi_%j.out
 #SBATCH --error=mrstat_mpi_%j.err
@@ -24,13 +24,6 @@ export UCX_NET_DEVICES=all
 
 cd /home/iwang3/mrstat_main
 
-echo "============================================="
-echo "  MPI MRSTAT — 2 nodes × 4 GPUs per node"
-echo "  Nodes: ${SLURM_NNODES}"
-echo "  Tasks: ${SLURM_NTASKS}"
-echo "  Job  : ${SLURM_JOB_ID}"
-echo "============================================="
-
 mpirun --mca pml ob1 --mca btl tcp,self julia --project=. scripts/mpi_mrstat_recon.jl
 
-echo "Job finished at $(date)"
+echo "Job finished"

@@ -1,10 +1,6 @@
 #!/bin/bash
-# ============================================================================
-# Problem Size Scaling: vary N with GPU counts (1, 2, 4, 6, 8)
-# N = 128, 192, 224, 256, 320, 384, 448, 512
-#
-# Usage: bash scripts/problem_size_scaling/run_problem_size_scaling.sh
-# ============================================================================
+
+# bash scripts/problem_size_scaling/run_problem_size_scaling.sh
 
 set -e
 cd /home/iwang3/mrstat_main
@@ -16,22 +12,20 @@ SCRIPT_MPI="scripts/problem_size_scaling/mpi_mrstat_recon_N.jl"
 OUTDIR="/home/iwang3/mrstat_main/problem_size_results"
 mkdir -p "$OUTDIR"
 
-echo "Submitting Problem Size Scaling jobs..."
 echo "Output directory: $OUTDIR"
-echo ""
 
-for N in 128 192 224 256 320 384 448 512; do
 
-    # Time estimate based on N
-    if [ $N -le 256 ]; then
-        TIME="01:00:00"
-    elif [ $N -le 384 ]; then
+for N in 128 224 320 384 448 512; do
+
+    if [ $N -le 224 ]; then
         TIME="02:00:00"
+    elif [ $N -le 384 ]; then
+        TIME="06:00:00"
     else
-        TIME="04:00:00"
+        TIME="12:00:00"
     fi
 
-    # --- 1 GPU ---
+    # 1 GPU
     JOB=$(sbatch --parsable \
         --job-name=ps-1g-N${N} \
         --output=${OUTDIR}/ps_1g_N${N}_%j.out \
@@ -53,7 +47,7 @@ julia --project=/home/iwang3/mrstat_main /home/iwang3/mrstat_main/${SCRIPT_1GPU}
 ")
     echo "  N=$N, 1 GPU:  job $JOB"
 
-    # --- 2 GPUs (1 node) ---
+    # 2 GPUs (1 node)
     JOB=$(sbatch --parsable \
         --job-name=ps-2g-N${N} \
         --output=${OUTDIR}/ps_2g_N${N}_%j.out \
@@ -77,7 +71,7 @@ mpirun julia --project=/home/iwang3/mrstat_main /home/iwang3/mrstat_main/${SCRIP
 ")
     echo "  N=$N, 2 GPUs: job $JOB"
 
-    # --- 4 GPUs (1 node) ---
+    # 4 GPUs (1 node)
     JOB=$(sbatch --parsable \
         --job-name=ps-4g-N${N} \
         --output=${OUTDIR}/ps_4g_N${N}_%j.out \
@@ -101,7 +95,7 @@ mpirun julia --project=/home/iwang3/mrstat_main /home/iwang3/mrstat_main/${SCRIP
 ")
     echo "  N=$N, 4 GPUs: job $JOB"
 
-    # --- 6 GPUs (2 nodes) ---
+    # 6 GPUs (2 nodes)
     JOB=$(sbatch --parsable \
         --job-name=ps-6g-N${N} \
         --output=${OUTDIR}/ps_6g_N${N}_%j.out \
@@ -125,7 +119,7 @@ mpirun --mca pml ob1 --mca btl tcp,self julia --project=/home/iwang3/mrstat_main
 ")
     echo "  N=$N, 6 GPUs: job $JOB"
 
-    # --- 8 GPUs (2 nodes) ---
+    # 8 GPUs (2 nodes)
     JOB=$(sbatch --parsable \
         --job-name=ps-8g-N${N} \
         --output=${OUTDIR}/ps_8g_N${N}_%j.out \
@@ -152,5 +146,3 @@ mpirun --mca pml ob1 --mca btl tcp,self julia --project=/home/iwang3/mrstat_main
     echo ""
 done
 
-echo "All jobs submitted ($((8 * 5)) jobs). Monitor with: squeue -u \$USER"
-echo "Results will be in: $OUTDIR"

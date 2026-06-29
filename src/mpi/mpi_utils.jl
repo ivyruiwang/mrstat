@@ -1,10 +1,8 @@
-# Distributed versions of TrustRegionReflective/utils.jl
-# All vector operations use MPI distributed primitives from MPIResources.jl
 
 function mpi_computeDistanceToBoundaries(x, g, LB, UB, comm)
     v = ones(eltype(g), length(g))
-    v[ (g .< 0) .& (UB .<  Inf) ] = UB[ (g .< 0) .& (UB .< Inf)  ] -  x[ (g .< 0) .& (UB .< Inf)  ]
-    v[ (g .> 0) .& (LB .> -Inf) ] =  x[ (g .> 0) .& (LB .> -Inf) ] - LB[ (g .> 0) .& (LB .> -Inf) ]
+    v[(g .< 0) .& (UB .< Inf)] = UB[(g .< 0) .& (UB .< Inf)] - x[(g .< 0) .& (UB .< Inf)]
+    v[(g .> 0) .& (LB .> -Inf)] = x[(g .> 0) .& (LB .> -Inf)] - LB[(g .> 0) .& (LB .> -Inf)]
 
     if mpi_any(any(v .< 0), comm)
         println("    Somehow x is not within the bounds")
@@ -12,8 +10,8 @@ function mpi_computeDistanceToBoundaries(x, g, LB, UB, comm)
     end
 
     dv = zeros(eltype(v), length(v))
-    dv[ (g .< 0) .& (UB .<  Inf) ] .= -1
-    dv[ (g .> 0) .& (LB .> -Inf) ] .=  1
+    dv[(g .< 0) .& (UB .< Inf)] .= -1
+    dv[(g .> 0) .& (LB .> -Inf)] .= 1
 
     return v, dv
 end
@@ -21,7 +19,7 @@ end
 function mpi_distanceToFeasibleRegion(x, s, LB, UB, comm)
     non_zero = s .!= 0
     steps = Inf * ones(length(x))
-    steps[non_zero] = max.( (LB[non_zero] - x[non_zero]) ./ s[non_zero], (UB[non_zero] - x[non_zero]) ./ s[non_zero])
+    steps[non_zero] = max.((LB[non_zero] - x[non_zero]) ./ s[non_zero], (UB[non_zero] - x[non_zero]) ./ s[non_zero])
     stepsize = mpi_minimum(steps, comm)
     boundary_hit = (steps .== stepsize)
 
@@ -33,7 +31,7 @@ function mpi_distanceToTrustRegion(x, p, trustRadius, comm)
     b = 2 * mpi_dot(x, p, comm)
     c = mpi_dot(x, x, comm) - trustRadius^2
 
-    τ = (-b + sqrt( b^2 - 4*a*c) ) / (2*a)
+    τ = (-b + sqrt(b^2 - 4 * a * c)) / (2 * a)
     return τ
 end
 
@@ -53,7 +51,7 @@ function mpi_distanceToTrustRegion2(x, s, trust_radius, comm)
         return
     end
 
-    d = sqrt(b*b - a*c)
+    d = sqrt(b * b - a * c)
     q = -(b + abs(d) * sign(b))
     t1 = q / a
     t2 = c / q
@@ -75,8 +73,8 @@ function mpi_adjustTrustRadius(ratio, step, Δ, min_ratio, comm)
 
     if ratio < min_ratio
         println("    Trust Radius too large")
-        Δ = (1/4) * Δ
-    elseif (ratio > 1/2) && (norm_step > ( 0.95 * Δ) )
+        Δ = (1 / 4) * Δ
+    elseif (ratio > 1 / 2) && (norm_step > (0.95 * Δ))
         println("    Trust Radius too small")
         Δ = 2 * Δ
     else
@@ -87,7 +85,7 @@ function mpi_adjustTrustRadius(ratio, step, Δ, min_ratio, comm)
 end
 
 function mpi_withinBounds(parameters, LB, UB, comm)
-    local_check = all( (parameters .>= LB) .& (parameters .<= UB) )
+    local_check = all((parameters .>= LB) .& (parameters .<= UB))
     return mpi_all(local_check, comm)
 end
 
@@ -101,7 +99,6 @@ function mpi_buildQuadratic1D(H, g, s, s0, comm)
     Hs = H(s)
     a = 0.5 * mpi_dot(s, Hs, comm)
 
-    # Check if s0 is zero to avoid redundant Hv calls
     if iszero(s0)
         b = mpi_dot(g, s, comm)
         c = zero(a)
@@ -114,7 +111,7 @@ function mpi_buildQuadratic1D(H, g, s, s0, comm)
     return a, b, c
 end
 
-# minimizeQuadratic1D is pure scalar — no change needed, use original directly
+# minimizeQuadratic1D is pure scalar so no change needed
 function minimizeQuadratic1D(a, b, lb, ub, c)
     t = [lb, ub]
     if a != 0
@@ -124,7 +121,7 @@ function minimizeQuadratic1D(a, b, lb, ub, c)
         end
     end
 
-    y = a .* t.^2 .+ b .* t .+ c
+    y = a .* t .^ 2 .+ b .* t .+ c
     minval = minimum(y)
     index = findfirst(x -> x == minval, y)
     argument = t[index[1]]
@@ -135,9 +132,9 @@ end
 function mpi_chooseStep(x, H_hat, g_hat, gn, gn_hat, D, trust_radius, theta, LB, UB, comm)
 
     if mpi_withinBounds(x + gn, LB, UB, comm)
-        step        = gn
-        step_hat    = gn_hat
-        step_value  = mpi_evaluateQuadratic(H_hat, g_hat, gn_hat, comm)
+        step = gn
+        step_hat = gn_hat
+        step_value = mpi_evaluateQuadratic(H_hat, g_hat, gn_hat, comm)
         println("          The Inexact Newton step was chosen")
         return step, step_hat, step_value
     end
@@ -149,8 +146,8 @@ function mpi_chooseStep(x, H_hat, g_hat, gn, gn_hat, D, trust_radius, theta, LB,
     rf_hat[boundary_hit] = -1 * rf_hat[boundary_hit]
     rf = D .* rf_hat
 
-    gn             = p_steplength * gn
-    gn_hat         = p_steplength * gn_hat
+    gn = p_steplength * gn
+    gn_hat = p_steplength * gn_hat
     x_on_boundary = x + gn
 
     meh, to_trust = mpi_distanceToTrustRegion2(gn_hat, rf_hat, trust_radius, comm)
@@ -182,16 +179,16 @@ function mpi_chooseStep(x, H_hat, g_hat, gn, gn_hat, D, trust_radius, theta, LB,
         rf_value = Inf
     end
 
-    # POTENTIAL STEP 2: Truncated Newton
-    gn       = theta * gn
-    gn_hat   = theta * gn_hat
-    gn_value  = mpi_evaluateQuadratic(H_hat, g_hat, gn_hat, comm)
+    # POTENTIAL STEP 2: Shorter Newton
+    gn = theta * gn
+    gn_hat = theta * gn_hat
+    gn_value = mpi_evaluateQuadratic(H_hat, g_hat, gn_hat, comm)
 
     # POTENTIAL STEP 3: Steepest Descent
     sd_hat = -g_hat
     sd = D .* sd_hat
 
-    to_trust         = trust_radius / mpi_norm(sd_hat, comm)
+    to_trust = trust_radius / mpi_norm(sd_hat, comm)
     to_feasible, meh = mpi_distanceToFeasibleRegion(x, sd, LB, UB, comm)
 
     if to_feasible < to_trust
@@ -203,7 +200,7 @@ function mpi_chooseStep(x, H_hat, g_hat, gn, gn_hat, D, trust_radius, theta, LB,
     a, b, c = mpi_buildQuadratic1D(H_hat, g_hat, sd_hat, zeros(length(g_hat)), comm)
     sd_steplength, sd_value = minimizeQuadratic1D(a, b, 0, sd_steplength_max, 0)
     sd_hat = sd_steplength * sd_hat
-    sd     = sd_steplength * sd
+    sd = sd_steplength * sd
 
     # Choose the best step
     values = [gn_value rf_value sd_value]
@@ -213,21 +210,21 @@ function mpi_chooseStep(x, H_hat, g_hat, gn, gn_hat, D, trust_radius, theta, LB,
     println("        gn: $(gn_value), rf: $(rf_value), sd: $(sd_value)")
 
     if index == 1
-        step        = gn
-        step_hat    = gn_hat
-        step_value  = gn_value
+        step = gn
+        step_hat = gn_hat
+        step_value = gn_value
         println("        The Inexact Newton step, restricted to feasible region, was chosen")
     end
     if index == 2
-        step        = rf
-        step_hat    = rf_hat
-        step_value  = rf_value
+        step = rf
+        step_hat = rf_hat
+        step_value = rf_value
         println("        The Reflected Inexact Newton step was chosen")
     end
     if index == 3
-        step        = sd
-        step_hat    = sd_hat
-        step_value  = sd_value
+        step = sd
+        step_hat = sd_hat
+        step_value = sd_value
         println("        The Steepest Descent step was chosen")
     end
 

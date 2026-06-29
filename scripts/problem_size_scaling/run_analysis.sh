@@ -1,9 +1,6 @@
 #!/bin/bash
-# ============================================================================
-# Run problem size scaling analysis on a GPU compute node
-#
-# Usage: bash scripts/problem_size_scaling/run_analysis.sh
-# ============================================================================
+
+# bash scripts/problem_size_scaling/run_analysis.sh
 
 cd /home/iwang3/mrstat_main
 
@@ -17,6 +14,6 @@ export JULIA_CONDAPKG_OFFLINE=true
 export MPLBACKEND=agg
 cd /home/iwang3/mrstat_main
 
-echo '=== Problem Size Scaling Analysis ==='
+echo 'Problem Size Scaling Analysis'
 julia --project=. scripts/problem_size_scaling/plot_problem_size.jl ${RESULTS_DIR}
 "

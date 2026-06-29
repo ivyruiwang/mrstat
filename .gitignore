@@ -5,3 +5,6 @@
 *.err
 .git_old_worktree
 # Manifest.toml
+noisy_results/
+noiseless_results/
+problem_size_results/

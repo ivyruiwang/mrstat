@@ -22,12 +22,6 @@ export MPLBACKEND="agg"
 
 cd /home/iwang3/mrstat_main
 
-echo "============================================="
-echo "  Single-GPU Baseline Reconstruction"
-echo "  Node : $(hostname)"
-echo "  Job  : ${SLURM_JOB_ID}"
-echo "============================================="
-
 julia --project=. scripts/single_gpu_recon.jl
 
-echo "Job finished at $(date)"
+echo "Job finished"
