@@ -1,8 +1,16 @@
-function solver(objective, x0, LB, UB, options::SolverOptions, plotfun)
 
-    # Inspired by trust region reflective from SciPy
+# All vectors are local (local_nvox × 4)
 
-    # Load the initial guess
+using MRSTAT: TrustRegionReflective
+using TickTock
+
+function mpi_solver(objective, x0, LB, UB, options::TrustRegionReflective.SolverOptions,
+    plotfun, comm, total_nvox)
+
+    rank = MPI.Comm_rank(comm)
+    local_nvox = length(x0) ÷ 4
+    total_length = total_nvox * 4
+
     x = x0
 
     println("    Calling f,r,g,H = objective(x,2)")
@@ -10,38 +18,36 @@ function solver(objective, x0, LB, UB, options::SolverOptions, plotfun)
     f, r, g, H = objective(x, 2)
     t_obj = (time() - t0) * 1000
 
-
-    # # Distance to boundary
-    # v, dv = computeDistanceToBoundaries(x, g, LB, UB);
-    # # Initial trust radius
-    # Δ = 0.1 * norm( x ./ (sqrt.(v) ) );o
+    # Initial trust radius
     println("Setting initial trust radius")
-    Δ = 0.1 * norm(x)
+    Δ = 0.1 * mpi_norm(x, comm)
     Δlimit = Δ * 1E-10
 
     iter = 1
     converged = false
     t = 0.0
 
-    state = SolverOutput(x, f, r, t)
+    x_full = mpi_gather_field_major(x, local_nvox, total_nvox, comm)
+    state = TrustRegionReflective.SolverOutput(x_full, f, r, t)
 
     options.save_every_iter && write_to_disk(state)
 
-    # 在进入 while 前打开 CSV
-    iterlog = open("solver_iter_breakdown_single_gpu.csv", "w")
-    println(iterlog, "iter,t_iter_ms,t_obj_ms,t_precond_ms,t_steihaug_ms,t_choose_ms,t_evalnew_ms")
+    # CSV logging
+    iterlog = nothing
+    if rank == 0
+        nnodes = parse(Int, get(ENV, "SLURM_NNODES", "1"))
+        nranks_total = MPI.Comm_size(comm)
+        csvname = "solver_iter_breakdown_$(nnodes)n$(nranks_total)g.csv"
+        iterlog = open(csvname, "w")
+        println(iterlog, "iter,t_iter_ms,t_obj_ms,t_precond_ms,t_steihaug_ms,t_choose_ms,t_evalnew_ms")
+    end
 
     while ((iter < (options.max_iter_trf + 1)) && (!converged))
-
-        # We determine two scaling fawctors: one from the diagonal of JᴴJ. This one makes parameters with low curvature move faster.
-        # The other is related to the distance of parameters to their respective boundaries.
-        # It slows down parameters that are close to their boundaries.
 
         println("ITERATION #$(iter)")
         tick()
 
         t_iter = time()
-        # 1) 目标与导数
 
         if iter > 1
             t0 = time()
@@ -49,20 +55,19 @@ function solver(objective, x0, LB, UB, options::SolverOptions, plotfun)
             f, r, g, H = objective(x, 2)
             t_obj = (time() - t0) * 1000
         end
-        # iter == 1 时 t_obj 保留循环前（第 11 行）的初始 objective 耗时
+        # iter == 1 时 t_obj 保留循环前（第 20 行）的初始 objective 耗时
 
         println("    f: $(f)",)
         println("    Δ: $(Δ)")
 
-        # 2) 预处理/缩放矩阵 D、C、Ĥ
+        # Scaling matrices D, C, Ĥ all local
         t0 = time()
-        v, dv = computeDistanceToBoundaries(x, g, LB, UB)
+        v, dv = mpi_computeDistanceToBoundaries(x, g, LB, UB, comm)
 
-        # Make scaling operator and scale gradient and Hessian
         D = sqrt.(v)
-        ĝ = D .* g
+        ĝ = D .* g
         C = dv .* g
-        Ĥ = x -> (D .* (H * (D .* x))) + (C .* x)
+        Ĥ = x -> (D .* (H * (D .* x))) + (C .* x)
         t_precond = (time() - t0) * 1000
 
         step_accepted = false
@@ -77,46 +82,47 @@ function solver(objective, x0, LB, UB, options::SolverOptions, plotfun)
 
         while !step_accepted
 
-            # Compute potential step using Steihaug
-            P = y -> y # Preconditioner, currently not used
-            z0 = zeros(length(ĝ))
+            P = y -> y
+            z0 = zeros(length(ĝ))
 
-            # 3) Steihaug
+            # Steihaug CG
             t0 = time()
             if perform_steihaug
-                steps = steihaug(Ĥ, ĝ, Δ, P, options.max_iter_steihaug, options.tol_steihaug, z0)
-                ŝ = steps[:, end]
+                steps = mpi_steihaug(Ĥ, ĝ, Δ, P, options.max_iter_steihaug, options.tol_steihaug, z0, total_length, comm)
+                ŝ = steps[:, end]
             else
-                ŝ = steps[:, sh_iter]
+                ŝ = steps[:, sh_iter]
             end
             t_steihaug += (time() - t0) * 1000
-            # ŝ = Krylov.cg(Ĥ, -ĝ, atol = options.tol_steihaug, rtol = options.tol_steihaug, itmax = options.max_iter_steihaug, radius = Δ, verbose = true)[1]
 
-            s = D .* ŝ
+            s = D .* ŝ
             x_new = x + s
 
-            # 4) 选择步长
+            # Choose step
             t0 = time()
-            # Select best step taking into account feasible region
-            θ = max(0.995, 1 - norm(v .* g, Inf))
+            θ = max(0.995, 1 - mpi_norminf(v .* g, comm))
             @info "Choose step"
-            @time step, step_hat, step_value = chooseStep(x, Ĥ, ĝ, s, ŝ, D, Δ, θ, LB, UB)
+            @time step, step_hat, step_value = mpi_chooseStep(x, Ĥ, ĝ, s, ŝ, D, Δ, θ, LB, UB, comm)
             t_choose += (time() - t0) * 1000
 
             x_new = x + step
 
-            # 5) 评估新点
-            # Compute new objective
+            # Evaluate new point
             println("    Calling f,r = objective(x_new,0)")
             t0 = time()
             f_new, r_new = objective(x_new, 0)
             t_evalnew += (time() - t0) * 1000
 
-            # 收敛判断逻辑
-            # Compute reduction
+            # Convergence logic
             actualReduction = -(f_new - f)
-            predictedReduction = -((g' * s) + 0.5 * s' * (H * s))
-            modifiedReduction = -(f_new - f + 0.5 * ŝ' * (C .* ŝ))
+
+            Hs = H * s
+            gs = mpi_dot(g, s, comm)
+            sHs = mpi_dot(s, Hs, comm)
+            predictedReduction = -(gs + 0.5 * sHs)
+
+            sCŝ = mpi_dot(ŝ, C .* ŝ, comm)
+            modifiedReduction = -(f_new - f + 0.5 * sCŝ)
             ratio = modifiedReduction / predictedReduction
 
             println("   reduction: $(actualReduction)")
@@ -126,14 +132,15 @@ function solver(objective, x0, LB, UB, options::SolverOptions, plotfun)
                 println("    Step accepted")
                 step_accepted = true
 
-                Δ = adjustTrustRadius(ratio, ŝ, Δ, options.min_ratio)
+                Δ = mpi_adjustTrustRadius(ratio, ŝ, Δ, options.min_ratio, comm)
                 x = x_new
                 f = f_new
                 r = r_new
 
                 t += tok()
 
-                state.x = hcat(state.x, x)
+                x_full = mpi_gather_field_major(x, local_nvox, total_nvox, comm)
+                state.x = hcat(state.x, x_full)
                 state.f = hcat(state.f, f)
                 state.r = hcat(state.r, r)
                 state.t = hcat(state.t, t)
@@ -142,21 +149,19 @@ function solver(objective, x0, LB, UB, options::SolverOptions, plotfun)
             else
                 println("    Find a smaller step (reduction: $(actualReduction)")
 
-                # sometimes this part keeps on iterating forever, need add
-                # a counter and have some maximum nr of tries
-
                 sh_iter = size(steps, 2)
 
                 while sh_iter >= size(steps, 2)
                     Δ = 0.5 * Δ
                     println("   Trust radius reduced to: $(Δ)")
-                    sh_iter = findlast(norm.(eachcol(steps)) .<= Δ)
+
+                    col_norms = mpi_colnorms(steps, comm)
+                    sh_iter = findlast(col_norms .<= Δ)
 
                     if sh_iter === nothing
                         sh_iter = 1
                         break
                     end
-
                 end
                 if sh_iter == 1
                     perform_steihaug = true
@@ -166,16 +171,20 @@ function solver(objective, x0, LB, UB, options::SolverOptions, plotfun)
             end
         end # Step accepted
 
-        # 6) 写 CSV：写时间分项
+        # CSV logging
         t_iter_ms = (time() - t_iter) * 1000
-        println(iterlog, "$(iter),$(t_iter_ms),$(t_obj),$(t_precond),$(t_steihaug),$(t_choose),$(t_evalnew)")
+        if rank == 0
+            println(iterlog, "$(iter),$(t_iter_ms),$(t_obj),$(t_precond),$(t_steihaug),$(t_choose),$(t_evalnew)")
+        end
 
         iter += 1
 
-        plotfun(x, "Iteration: $iter")
+        plotfun(x_full, "Iteration: $iter")
     end
 
-    close(iterlog)
+    if rank == 0
+        close(iterlog)
+    end
 
     return state
 end

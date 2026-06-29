@@ -11,7 +11,7 @@ function plot_T₁T₂ρ(x::AbstractArray{<:AbstractTissueProperties}, Nx, Ny, f
 
     q = StructArray(reshape(x, Nx, Ny))
 
-    figure()
+    fig=figure()
 
     subplot(131)
     imshow(q.T₁, clim=(0.0, 2.5), cmap=cmap_lipari)
@@ -28,4 +28,7 @@ function plot_T₁T₂ρ(x::AbstractArray{<:AbstractTissueProperties}, Nx, Ny, f
 
     suptitle(figtitle)
 
+    save_path = "/home/iwang3/mrstat_figures"
+    savefig(joinpath(save_path, figtitle * ".png"))
+    close(fig) 
 end
